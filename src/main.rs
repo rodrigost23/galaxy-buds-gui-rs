@@ -2,7 +2,7 @@ use adw::{NavigationPage, NavigationSplitView, ViewStack, Window, prelude::*};
 use gtk4::{Application, Builder, ListBox};
 
 // A standard practice is to use a reverse-domain name for the app ID.
-const APP_ID: &str = "com.example.adw-settings-app";
+const APP_ID: &str = "com.github.rodrigost23.galaxy-buds-gui-rs";
 
 fn main() {
     // Initialize Libadwaita and create the GTK Application.
@@ -48,12 +48,11 @@ fn build_ui(app: &Application) {
         move |_, row| {
             if let Some(row) = row {
                 view_stack.set_visible_child_name("home");
-
-                let name = match row.index() {
-                    1 => Some("page-noise"),
-                    2 => Some("page-touch"),
-                    3 => Some("page-equalizer"),
-                    4 => Some("page-find"),
+                let name = match row.widget_name().as_str() {
+                    "row_noise" => Some("page-noise"),
+                    "row_touch" => Some("page-touch"),
+                    "row_equalizer" => Some("page-equalizer"),
+                    "row_find" => Some("page-find"),
                     _ => None,
                 };
 

@@ -2,7 +2,7 @@
 <!-- Created with Cambalache 0.96.1 -->
 <interface>
   <!-- interface-name galaxy-buds-gui-rs.ui -->
-  <requires lib="gio" version="2.0" />
+  <requires lib="gio" version="2.0"/>
   <requires lib="gtk" version="4.4"/>
   <requires lib="libadwaita" version="1.4"/>
   <object class="AdwWindow" id="main_window">
@@ -21,7 +21,7 @@
       <object class="AdwNavigationSplitView" id="split_view">
         <property name="content">
           <object class="AdwNavigationPage" id="content_page">
-            <property name="title" />
+            <property name="title"/>
             <child>
               <object class="AdwToolbarView">
                 <child type="top">
@@ -34,57 +34,57 @@
                   <object class="AdwViewStack" id="view_stack">
                     <child>
                       <object class="AdwViewStackPage" id="home">
-                        <property name="name">home</property>
-                        <property name="title">Home</property>
                         <property name="child">
                           <object class="AdwStatusPage">
                             <property name="title">Home</property>
                           </object>
                         </property>
+                        <property name="name">home</property>
+                        <property name="title">Home</property>
                       </object>
                     </child>
                     <child>
                       <object class="AdwViewStackPage" id="page_noise">
-                        <property name="name">page-noise</property>
-                        <property name="title">Noise Control</property>
                         <property name="child">
                           <object class="AdwStatusPage">
                             <property name="title">Noise Control</property>
                           </object>
                         </property>
+                        <property name="name">page-noise</property>
+                        <property name="title">Noise Control</property>
                       </object>
                     </child>
                     <child>
                       <object class="AdwViewStackPage" id="page_touch">
-                        <property name="name">page-touch</property>
-                        <property name="title">Touch</property>
                         <property name="child">
                           <object class="AdwStatusPage">
                             <property name="title">Touch</property>
                           </object>
                         </property>
+                        <property name="name">page-touch</property>
+                        <property name="title">Touch</property>
                       </object>
                     </child>
                     <child>
                       <object class="AdwViewStackPage" id="page_equalizer">
-                        <property name="name">page-equalizer</property>
-                        <property name="title">Equalizer</property>
                         <property name="child">
                           <object class="AdwStatusPage">
                             <property name="title">Equalizer</property>
                           </object>
                         </property>
+                        <property name="name">page-equalizer</property>
+                        <property name="title">Equalizer</property>
                       </object>
                     </child>
                     <child>
                       <object class="AdwViewStackPage" id="page_find">
-                        <property name="name">page-find</property>
-                        <property name="title">Find</property>
                         <property name="child">
                           <object class="AdwStatusPage">
                             <property name="title">Find</property>
                           </object>
                         </property>
+                        <property name="name">page-find</property>
+                        <property name="title">Find</property>
                       </object>
                     </child>
                   </object>
@@ -138,7 +138,7 @@
                               <object class="GtkLabel">
                                 <property name="label">Device Name</property>
                                 <style>
-                                  <class name="heading" />
+                                  <class name="heading"/>
                                 </style>
                               </object>
                             </child>
@@ -178,7 +178,7 @@
                                   </object>
                                 </child>
                                 <style>
-                                  <class name="caption" />
+                                  <class name="caption"/>
                                 </style>
                               </object>
                             </child>
@@ -187,29 +187,68 @@
                       </object>
                     </child>
                     <child>
+                      <object class="GtkListBoxRow">
+                        <property name="accessible-role">separator</property>
+                        <property name="activatable">False</property>
+                        <property name="can-focus">False</property>
+                        <property name="can-target">False</property>
+                        <property name="child">
+                          <object class="GtkSeparator"/>
+                        </property>
+                        <property name="css-name">separator</property>
+                        <property name="focus-on-click">False</property>
+                        <property name="focusable">False</property>
+                        <property name="selectable">False</property>
+                      </object>
+                    </child>
+                    <child>
                       <object class="AdwActionRow" id="row_noise">
                         <property name="accessible-role">navigation</property>
                         <property name="action-name">navigation.push</property>
                         <property name="action-target">'page-option-1'</property>
+                        <property name="name">row_noise</property>
                         <property name="title">Noise Control</property>
+                        <child type="prefix">
+                          <object class="GtkImage">
+                            <property name="icon-name">audio-volume-medium-symbolic</property>
+                          </object>
+                        </child>
                       </object>
                     </child>
                     <child>
-                      <object class="AdwActionRow">
+                      <object class="AdwActionRow" id="row_touch">
                         <property name="accessible-role">navigation</property>
+                        <property name="name">row_touch</property>
                         <property name="title">Touchpad</property>
+                        <child type="prefix">
+                          <object class="GtkImage">
+                            <property name="icon-name">input-touchpad-symbolic</property>
+                          </object>
+                        </child>
                       </object>
                     </child>
                     <child>
-                      <object class="AdwActionRow">
+                      <object class="AdwActionRow" id="row_equalizer">
                         <property name="accessible-role">navigation</property>
+                        <property name="name">row_equalizer</property>
                         <property name="title">Equalizer</property>
+                        <child type="prefix">
+                          <object class="GtkImage">
+                            <property name="icon-name">audio-card-symbolic</property>
+                          </object>
+                        </child>
                       </object>
                     </child>
                     <child>
-                      <object class="AdwActionRow">
+                      <object class="AdwActionRow" id="row_find">
                         <property name="accessible-role">navigation</property>
+                        <property name="name">row_find</property>
                         <property name="title">Find my earbuds</property>
+                        <child type="prefix">
+                          <object class="GtkImage">
+                            <property name="icon-name">audio-volume-medium-symbolic</property>
+                          </object>
+                        </child>
                       </object>
                     </child>
                   </object>
