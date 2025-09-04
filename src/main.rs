@@ -1,4 +1,4 @@
-use adw::{ViewStack, Window, prelude::*};
+use adw::{NavigationPage, NavigationSplitView, NavigationView, Window, prelude::*};
 use gtk4::{Application, Builder, ListBox};
 
 // A standard practice is to use a reverse-domain name for the app ID.
@@ -24,29 +24,81 @@ fn build_ui(app: &Application) {
     let window: Window = builder
         .object("main_window")
         .expect("Could not get main_window");
+    let content_page: NavigationPage = builder
+        .object("content_page")
+        .expect("Could not get content_page");
     let sidebar_list: ListBox = builder
         .object("sidebar_list")
         .expect("Could not get sidebar_list");
-    let view_stack: ViewStack = builder
-        .object("view_stack")
-        .expect("Could not get view_stack");
+    let split_view: NavigationSplitView = builder
+        .object("split_view")
+        .expect("Could not get split_view");
+    let nav_view: NavigationView = builder.object("nav_view").expect("Could not get nav_view");
 
     window.set_application(Some(app));
+    sidebar_list.unselect_all();
 
-    // Define the names of the pages in our ViewStack, matching the .ui file.
-    let page_names = ["page_summary", "page_option_1"];
+    // Connect sidebar row selection to show the appropriate content
+    sidebar_list.connect_row_selected({
+        let split_view = split_view.clone();
+        let nav_view = nav_view.clone();
 
-    // Connect sidebar row selection to view switching in the ViewStack.
-    sidebar_list.connect_row_selected(move |_, row| {
-        if let Some(selected_row) = row {
-            let index = selected_row.index() as usize;
+        move |_, row| {
+            if let Some(row) = row {
+                nav_view.pop_to_tag("home");
 
-            // Get the page name corresponding to the selected row's index.
-            if let Some(page_name) = page_names.get(index) {
-                view_stack.set_visible_child_name(page_name);
+                let tag = match row.index() {
+                    1 => Some("page-noise"),
+                    2 => Some("page-touch"),
+                    3 => Some("page-equalizer"),
+                    4 => Some("page-find"),
+                    _ => None,
+                };
+
+                if let Some(tag) = tag {
+                    nav_view.replace_with_tags(&["home", tag]);
+                    split_view.set_show_content(true);
+                } else {
+                    split_view.set_show_content(false);
+                }
             }
         }
     });
 
+    // Connect splitview to content shows to listen when the back button is pressed
+    split_view.connect_notify_local(Some("show-content"), {
+        let sidebar_list = sidebar_list.clone();
+        let nav_view = nav_view.clone();
+
+        move |s, _| {
+            if !s.shows_content() {
+                nav_view.pop_to_tag("home");
+                sidebar_list.select_row(sidebar_list.row_at_index(0).as_ref());
+            }
+        }
+    });
+
+    // Connect pop and push to update the headerbar title
+    nav_view.connect_pushed({
+        let content_page = content_page.clone();
+        move |n| {
+            update_title(n, &content_page);
+        }
+    });
+
+    nav_view.connect_popped({
+        let content_page = content_page.clone();
+        move |n, _| {
+            update_title(n, &content_page);
+        }
+    });
+
     window.present();
+}
+
+fn update_title(nav_view: &NavigationView, content_page: &NavigationPage) {
+    if let Some(page) = nav_view.visible_page() {
+        let title = page.title();
+        content_page.set_title(title.as_str());
+    }
 }
