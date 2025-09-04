@@ -31,60 +31,60 @@
                   </object>
                 </child>
                 <child>
-                  <object class="AdwNavigationView" id="nav_view">
+                  <object class="AdwViewStack" id="view_stack">
                     <child>
-                      <object class="AdwNavigationPage" id="home">
-                        <property name="tag">home</property>
-                        <property name="title" />
-                        <child>
+                      <object class="AdwViewStackPage" id="home">
+                        <property name="name">home</property>
+                        <property name="title">Home</property>
+                        <property name="child">
                           <object class="AdwStatusPage">
-                            <property name="title">Placeholder</property>
+                            <property name="title">Home</property>
                           </object>
-                        </child>
+                        </property>
                       </object>
                     </child>
                     <child>
-                      <object class="AdwNavigationPage" id="page_noise">
-                        <property name="tag">page-noise</property>
+                      <object class="AdwViewStackPage" id="page_noise">
+                        <property name="name">page-noise</property>
                         <property name="title">Noise Control</property>
-                        <child>
+                        <property name="child">
                           <object class="AdwStatusPage">
                             <property name="title">Noise Control</property>
                           </object>
-                        </child>
+                        </property>
                       </object>
                     </child>
                     <child>
-                      <object class="AdwNavigationPage" id="page_touch">
-                        <property name="tag">page-touch</property>
+                      <object class="AdwViewStackPage" id="page_touch">
+                        <property name="name">page-touch</property>
                         <property name="title">Touch</property>
-                        <child>
+                        <property name="child">
                           <object class="AdwStatusPage">
                             <property name="title">Touch</property>
                           </object>
-                        </child>
+                        </property>
                       </object>
                     </child>
                     <child>
-                      <object class="AdwNavigationPage" id="page_equalizer">
-                        <property name="tag">page-equalizer</property>
+                      <object class="AdwViewStackPage" id="page_equalizer">
+                        <property name="name">page-equalizer</property>
                         <property name="title">Equalizer</property>
-                        <child>
+                        <property name="child">
                           <object class="AdwStatusPage">
                             <property name="title">Equalizer</property>
                           </object>
-                        </child>
+                        </property>
                       </object>
                     </child>
                     <child>
-                      <object class="AdwNavigationPage" id="page_find">
-                        <property name="tag">page-find</property>
+                      <object class="AdwViewStackPage" id="page_find">
+                        <property name="name">page-find</property>
                         <property name="title">Find</property>
-                        <child>
+                        <property name="child">
                           <object class="AdwStatusPage">
                             <property name="title">Find</property>
                           </object>
-                        </child>
+                        </property>
                       </object>
                     </child>
                   </object>
