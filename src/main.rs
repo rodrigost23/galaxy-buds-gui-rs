@@ -1,22 +1,15 @@
+mod app;
 mod bluetooth;
-mod ui;
 
-use adw::prelude::*;
-use gtk4::Application;
+use relm4::RelmApp;
+
+use crate::app::ComponentInit;
 
 const APP_ID: &str = "com.github.rodrigost23.galaxy-buds-gui-rs";
 
 fn main() {
-    // Initialize Libadwaita and create the GTK Application.
-    adw::init().expect("Failed to initialize Libadwaita.");
-    let app = Application::builder().application_id(APP_ID).build();
-
-    // Connect the "activate" signal to the build_ui function.
-    app.connect_activate(|app| {
-        let window = ui::build_window(app);
-        window.present();
-    });
-
-    // Run the application.
-    app.run();
+    // Relm4 handles the initialization of Libadwaita and the GTK Application.
+    let app = RelmApp::new(APP_ID);
+    // Run the main application component.
+    app.run::<app::AppModel>(ComponentInit {});
 }
