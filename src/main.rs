@@ -1,6 +1,9 @@
 use adw::{NavigationPage, NavigationSplitView, ViewStack, Window, prelude::*};
-use bluer::rfcomm::{Profile, Role};
-use futures::StreamExt;
+use bluer::{
+    Adapter, AdapterEvent, Device, Session, Uuid,
+    rfcomm::{Profile, Role},
+};
+use futures::{StreamExt, pin_mut};
 use galaxy_buds_rs::{
     message::{self, Message, extended_status_updated::ExtendedStatusUpdate, ids},
     model::Model,
@@ -24,12 +27,38 @@ fn main() {
     app.run();
 }
 
-pub async fn bluetooth_loop(tx: mpsc::Sender<String>) -> Result<(), Box<dyn std::error::Error>> {
-    let session = bluer::Session::new().await?;
+/// Discovers, verifies, and returns the first available Galaxy Buds device.
+pub async fn discover_galaxy_buds(session: &Session) -> Result<Device, Box<dyn std::error::Error>> {
     let adapter = session.default_adapter().await?;
     adapter.set_powered(true).await?;
-    // TODO: Discover devices or connect directly if already paired
-    let device = adapter.device("MAC_ADDRESS".parse()?).unwrap();
+
+    println!("Discovering devices...");
+
+    // Get a stream of all existing devices
+    let addrs = adapter.device_addresses().await?;
+    let devices = addrs.iter().filter_map(|addr| adapter.device(*addr).ok());
+
+    pin_mut!(devices);
+
+    let custom_spp_uuid: Uuid = "2e73a4ad-332d-41fc-90e2-16bef06523f2".parse()?;
+
+    while let Some(device) = devices.next() {
+        if let Ok(Some(uuids)) = device.uuids().await {
+            if uuids.contains(&custom_spp_uuid) {
+                println!("Found Galaxy Buds device: {:?}", device.name().await);
+                return Ok(device);
+            }
+        } else {
+            return Err("No UUIDs found for device".into());
+        }
+    }
+
+    Err("No Galaxy Buds device found".into())
+}
+
+pub async fn bluetooth_loop(tx: mpsc::Sender<String>) -> Result<(), Box<dyn std::error::Error>> {
+    let session = Session::new().await?;
+    let device = discover_galaxy_buds(&session).await?;
 
     if !device.is_connected().await? {
         println!("Connecting...");
