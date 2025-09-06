@@ -3,10 +3,7 @@ use bluer::{
     rfcomm::{Profile, Role, Stream},
 };
 use futures::{StreamExt, pin_mut};
-use galaxy_buds_rs::{
-    message::{self, Message, extended_status_updated::ExtendedStatusUpdate, ids},
-    model::Model,
-};
+
 use relm4::{Worker, prelude::*};
 use std::{sync::Arc, time::Duration};
 use tokio::{
@@ -16,13 +13,7 @@ use tokio::{
     time::sleep,
 };
 
-/// A strongly-typed wrapper for incoming messages from the Galaxy Buds.
-#[derive(Debug)]
-pub enum BudsMessage {
-    StatusUpdate(message::status_updated::StatusUpdate),
-    ExtendedStatusUpdate(ExtendedStatusUpdate),
-    Unknown { id: u8 },
-}
+use crate::buds_message::BudsMessage;
 
 // --- Worker I/O ---
 
@@ -98,34 +89,26 @@ impl Worker for BluetoothWorker {
                                 ))
                                 .unwrap();
                             *stream_guard = None; // Mark as disconnected.
+                            sender.output(BluetoothWorkerOutput::Disconnected).unwrap();
                         }
                         Ok(n) => {
                             let buff = &buffer[..n];
-                            let id = buff[3];
 
-                            // Ignore keep-alive messages.
-                            if id == 242 {
-                                continue;
-                            }
-
-                            let message = Message::new(buff, Model::BudsLive);
-                            let msg = match id {
-                                ids::STATUS_UPDATED => BudsMessage::StatusUpdate(message.into()),
-                                ids::EXTENDED_STATUS_UPDATED => {
-                                    BudsMessage::ExtendedStatusUpdate(message.into())
+                            match BudsMessage::from_bytes(buff) {
+                                Some(msg) => {
+                                    sender
+                                        .output(BluetoothWorkerOutput::DataReceived(msg))
+                                        .unwrap();
                                 }
-                                _ => BudsMessage::Unknown { id },
+                                None => continue,
                             };
-
-                            sender
-                                .output(BluetoothWorkerOutput::DataReceived(msg))
-                                .unwrap();
                         }
                         Err(e) => {
                             sender
                                 .output(BluetoothWorkerOutput::Error(format!("Read error: {}", e)))
                                 .unwrap();
                             *stream_guard = None; // Mark as disconnected.
+                            sender.output(BluetoothWorkerOutput::Disconnected).unwrap();
                         }
                     }
                 } else {

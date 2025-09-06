@@ -17,6 +17,9 @@
                 <property name="show-start-title-buttons">True</property>
               </object>
             </child>
+            <child type="top">
+              <object class="AdwBanner" id="banner" />
+            </child>
             <child>
               <object class="AdwViewStack" id="view_stack">
                 <child>
