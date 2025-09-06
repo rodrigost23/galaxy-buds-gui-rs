@@ -126,7 +126,7 @@
                         </child>
                         <child>
                           <object class="GtkLabel" id="device_name">
-                            <property name="label">Device Name</property>
+                            <property name="label">Not connected</property>
                             <style>
                               <class name="heading"/>
                             </style>
@@ -145,7 +145,7 @@
                                   </object>
                                 </child>
                                 <child>
-                                  <object class="GtkLabel">
+                                  <object class="GtkLabel" id="buds_battery">
                                     <property name="label">L / R 100%</property>
                                   </object>
                                 </child>
@@ -161,7 +161,7 @@
                                   </object>
                                 </child>
                                 <child>
-                                  <object class="GtkLabel">
+                                  <object class="GtkLabel" id="case_battery">
                                     <property name="label">100%</property>
                                   </object>
                                 </child>

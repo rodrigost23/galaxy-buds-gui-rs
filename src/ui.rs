@@ -38,6 +38,9 @@ pub struct AppWidgets {
     sidebar_list: gtk4::ListBox,
     view_stack: adw::ViewStack,
     device_name_label: gtk4::Label,
+    // Battery labels
+    buds_battery: gtk4::Label,
+    case_battery: gtk4::Label,
 }
 
 #[derive(Debug)]
@@ -114,6 +117,12 @@ impl SimpleComponent for App {
             device_name_label: builder
                 .object("device_name")
                 .expect("Missing device_name in UI file"),
+            buds_battery: builder
+                .object("buds_battery")
+                .expect("Missing buds_battery in UI file"),
+            case_battery: builder
+                .object("case_battery")
+                .expect("Missing case_battery in UI file"),
         };
 
         // Sidebar row selection handler
@@ -169,9 +178,11 @@ impl SimpleComponent for App {
                 BluetoothWorkerOutput::DataReceived(data) => match data {
                     BudsMessage::StatusUpdate(status) => {
                         println!("Status Update: {:?}", status);
+                        self.buds_status = Some(BudsStatus::StatusUpdate(status));
                     }
                     BudsMessage::ExtendedStatusUpdate(ext_status) => {
                         println!("Extended Status Update: {:?}", ext_status);
+                        self.buds_status = Some(BudsStatus::ExtendedStatusUpdate(ext_status));
                     }
                     BudsMessage::Unknown { id, buffer: _ } => {
                         println!("Unknown message ID: {}", id);
@@ -247,6 +258,9 @@ impl SimpleComponent for App {
             }
         }
 
+        // Update battery labels
+        self.update_battery_view(widgets);
+
         // Update device name label
         if let Some(device) = &self.bt_device {
             widgets.device_name_label.set_text(device.name.as_str());
@@ -255,5 +269,40 @@ impl SimpleComponent for App {
         }
 
         widgets.view_stack.set_visible_child_name(&self.active_page);
+    }
+}
+
+impl App {
+    fn update_battery_view(&self, widgets: &mut AppWidgets) {
+        let battery_left: i8;
+        let battery_right: i8;
+        let battery_case: i8;
+        match &self.buds_status {
+            Some(BudsStatus::StatusUpdate(status)) => {
+                battery_left = status.battery_left;
+                battery_right = status.battery_right;
+                battery_case = status.battery_case;
+            }
+            Some(BudsStatus::ExtendedStatusUpdate(ext_status)) => {
+                battery_left = ext_status.battery_left;
+                battery_right = ext_status.battery_right;
+                battery_case = ext_status.battery_case;
+            }
+            None => {
+                widgets.buds_battery.set_text("N/A");
+                widgets.case_battery.set_text("N/A");
+                return;
+            }
+        }
+
+        let battery_buds = if battery_left == battery_right {
+            format!("L / R {}%", battery_left)
+        } else {
+            format!("L {}% / R {}%", battery_left, battery_right)
+        };
+        let battery_case = format!("{}%", battery_case);
+
+        widgets.buds_battery.set_text(&battery_buds);
+        widgets.case_battery.set_text(&battery_case);
     }
 }
