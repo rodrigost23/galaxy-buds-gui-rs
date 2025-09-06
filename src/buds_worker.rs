@@ -1,5 +1,5 @@
 use bluer::{
-    Device, Session, Uuid,
+    Device, DeviceProperty, Session, Uuid,
     rfcomm::{Profile, Role, Stream},
 };
 use futures::{StreamExt, pin_mut};
@@ -13,7 +13,7 @@ use tokio::{
     time::sleep,
 };
 
-use crate::buds_message::BudsMessage;
+use crate::model::{buds_message::BudsMessage, device_info::DeviceInfo};
 
 // --- Worker I/O ---
 
@@ -29,6 +29,7 @@ pub enum BluetoothWorkerInput {
 
 #[derive(Debug)]
 pub enum BluetoothWorkerOutput {
+    Discovered(DeviceInfo),
     Connected,
     Disconnected,
     DataReceived(BudsMessage),
@@ -127,7 +128,8 @@ impl Worker for BluetoothWorker {
         let state = self.state.clone();
         self.runtime.block_on(async {
             match msg {
-                BluetoothWorkerInput::Connect => match connect_and_get_stream().await {
+                BluetoothWorkerInput::Connect => match connect_and_get_stream(sender.clone()).await
+                {
                     Ok(stream) => {
                         let mut stream_guard = state.stream.lock().await;
                         *stream_guard = Some(stream);
@@ -166,9 +168,17 @@ impl Worker for BluetoothWorker {
 // --- Async Helper Functions ---
 
 /// Performs the full bluetooth connection and profile registration dance.
-async fn connect_and_get_stream() -> Result<Stream, Box<dyn std::error::Error + Send + Sync>> {
+async fn connect_and_get_stream(
+    sender: ComponentSender<BluetoothWorker>,
+) -> Result<Stream, Box<dyn std::error::Error + Send + Sync>> {
     let session = Session::new().await?;
     let device = discover_galaxy_buds(&session).await?;
+
+    sender
+        .output(BluetoothWorkerOutput::Discovered(
+            DeviceInfo::from_properties(device.all_properties().await.unwrap()),
+        ))
+        .unwrap();
 
     println!("Connecting to device...");
     device.connect().await?;

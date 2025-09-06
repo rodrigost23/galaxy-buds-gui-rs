@@ -1,5 +1,5 @@
 use adw::{glib::object::ObjectExt, prelude::AdwApplicationWindowExt};
-use bluer::Device;
+use bluer::{Device, DeviceProperty};
 use galaxy_buds_rs::message::{
     extended_status_updated::ExtendedStatusUpdate, status_updated::StatusUpdate,
 };
@@ -7,8 +7,8 @@ use gtk4::prelude::{GtkWindowExt, WidgetExt};
 use relm4::{Component, ComponentParts, ComponentSender, SimpleComponent, WorkerController};
 
 use crate::{
-    buds_message::BudsMessage,
     buds_worker::{BluetoothWorker, BluetoothWorkerInput, BluetoothWorkerOutput},
+    model::{buds_message::BudsMessage, device_info::DeviceInfo},
 };
 
 enum ConnectionState {
@@ -27,7 +27,7 @@ pub struct App {
     active_page: String,
     bt_worker: WorkerController<BluetoothWorker>,
     connection_state: ConnectionState,
-    bt_device: Option<Device>,
+    bt_device: Option<DeviceInfo>,
     buds_status: Option<BudsStatus>,
 }
 
@@ -37,6 +37,7 @@ pub struct AppWidgets {
     content_page: adw::NavigationPage,
     sidebar_list: gtk4::ListBox,
     view_stack: adw::ViewStack,
+    device_name_label: gtk4::Label,
 }
 
 #[derive(Debug)]
@@ -110,6 +111,9 @@ impl SimpleComponent for App {
             view_stack: builder
                 .object("view_stack")
                 .expect("Missing view_stack in UI file"),
+            device_name_label: builder
+                .object("device_name")
+                .expect("Missing device_name in UI file"),
         };
 
         // Sidebar row selection handler
@@ -185,6 +189,10 @@ impl SimpleComponent for App {
                     eprintln!("Bluetooth error: {}", err);
                     self.connection_state = ConnectionState::Error(err);
                 }
+                BluetoothWorkerOutput::Discovered(device) => {
+                    println!("Discovered device: {:?}", device);
+                    self.bt_device = Some(device);
+                }
             },
             AppInput::Connect => {
                 if let ConnectionState::Disconnected | ConnectionState::Error(_) =
@@ -216,14 +224,20 @@ impl SimpleComponent for App {
             ConnectionState::Connected => widgets.banner.set_revealed(false),
             ConnectionState::Disconnected => {
                 widgets.banner.set_revealed(true);
-                widgets.banner.set_title(
-                    &"Disconnected. Please ensure your Galaxy Buds are powered on and in range.",
-                );
-                widgets.banner.set_button_label(Some(&"Connect"));
+                widgets.banner.set_title(&"Disconnected");
+                if self.bt_device.is_some() {
+                    widgets.banner.set_button_label(Some(&"Connect"));
+                }
             }
             ConnectionState::Connecting => {
                 widgets.banner.set_revealed(true);
-                widgets.banner.set_title(&"Connecting to Galaxy Buds...");
+                widgets.banner.set_title(&format!(
+                    "Connecting to {}...",
+                    self.bt_device
+                        .as_ref()
+                        .map(|d| d.name.as_str())
+                        .unwrap_or("Galaxy Buds")
+                ));
                 widgets.banner.set_button_label(None);
             }
             ConnectionState::Error(ref err) => {
@@ -231,6 +245,13 @@ impl SimpleComponent for App {
                 widgets.banner.set_title(&format!("Error: {}", err));
                 widgets.banner.set_button_label(Some(&"Retry"));
             }
+        }
+
+        // Update device name label
+        if let Some(device) = &self.bt_device {
+            widgets.device_name_label.set_text(device.name.as_str());
+        } else {
+            widgets.device_name_label.set_text("Not connected");
         }
 
         widgets.view_stack.set_visible_child_name(&self.active_page);

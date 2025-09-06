@@ -1,5 +1,5 @@
-mod buds_message;
 mod buds_worker;
+mod model;
 mod ui;
 
 use relm4::RelmApp;

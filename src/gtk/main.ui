@@ -4,11 +4,11 @@
   <!-- interface-name galaxy-buds-gui-rs.ui -->
   <requires lib="gio" version="2.0"/>
   <requires lib="gtk" version="4.4"/>
-  <requires lib="libadwaita" version="1.4" />
+  <requires lib="libadwaita" version="1.4"/>
   <object class="AdwNavigationSplitView" id="split_view">
     <property name="content">
       <object class="AdwNavigationPage" id="content_page">
-        <property name="title" />
+        <property name="title"/>
         <child>
           <object class="AdwToolbarView">
             <child type="top">
@@ -18,7 +18,7 @@
               </object>
             </child>
             <child type="top">
-              <object class="AdwBanner" id="banner" />
+              <object class="AdwBanner" id="banner"/>
             </child>
             <child>
               <object class="AdwViewStack" id="view_stack">
@@ -125,10 +125,10 @@
                           </object>
                         </child>
                         <child>
-                          <object class="GtkLabel">
+                          <object class="GtkLabel" id="device_name">
                             <property name="label">Device Name</property>
                             <style>
-                              <class name="heading" />
+                              <class name="heading"/>
                             </style>
                           </object>
                         </child>
@@ -168,7 +168,7 @@
                               </object>
                             </child>
                             <style>
-                              <class name="caption" />
+                              <class name="caption"/>
                             </style>
                           </object>
                         </child>
@@ -183,7 +183,7 @@
                     <property name="can-focus">False</property>
                     <property name="can-target">False</property>
                     <property name="child">
-                      <object class="GtkSeparator" />
+                      <object class="GtkSeparator"/>
                     </property>
                     <property name="css-name">separator</property>
                     <property name="focus-on-click">False</property>
