@@ -1,10 +1,14 @@
 use adw::{glib::object::ObjectExt, prelude::AdwApplicationWindowExt};
 use gtk4::prelude::{GtkWindowExt, WidgetExt};
-use relm4::{ComponentParts, ComponentSender, SimpleComponent};
+use relm4::{Component, ComponentParts, ComponentSender, SimpleComponent, WorkerController};
 
-#[derive(Default)]
+use crate::bluetooth_worker::{
+    self, BluetoothWorker, BluetoothWorkerInput, BluetoothWorkerOutput, BudsMessage,
+};
+
 pub struct AppModel {
     active_page: String,
+    bt_worker: WorkerController<BluetoothWorker>,
 }
 
 pub struct AppWidgets {
@@ -18,6 +22,7 @@ pub struct AppWidgets {
 pub enum AppInput {
     SelectRow(String),
     ShowContent(bool),
+    BluetoothEvent(BluetoothWorkerOutput),
 }
 
 #[derive(Debug)]
@@ -46,11 +51,16 @@ impl SimpleComponent for AppModel {
     ) -> ComponentParts<Self> {
         let model = AppModel {
             active_page: "home".into(),
+            bt_worker: BluetoothWorker::builder()
+                .detach_worker(())
+                .forward(sender.input_sender(), AppInput::BluetoothEvent),
         };
 
         let builder = gtk4::Builder::from_string(include_str!("gtk/main.ui"));
 
-        let split_view: adw::NavigationSplitView = builder.object("split_view").expect("Missing split_view in UI file");
+        let split_view: adw::NavigationSplitView = builder
+            .object("split_view")
+            .expect("Missing split_view in UI file");
         window.set_content(Some(&split_view));
 
         // Breakpoint for responsive layout
@@ -64,9 +74,15 @@ impl SimpleComponent for AppModel {
 
         let widgets = AppWidgets {
             split_view,
-            content_page: builder.object("content_page").expect("Missing content_page in UI file"),
-            sidebar_list: builder.object("sidebar_list").expect("Missing sidebar_list in UI file"),
-            view_stack: builder.object("view_stack").expect("Missing view_stack in UI file"),
+            content_page: builder
+                .object("content_page")
+                .expect("Missing content_page in UI file"),
+            sidebar_list: builder
+                .object("sidebar_list")
+                .expect("Missing sidebar_list in UI file"),
+            view_stack: builder
+                .object("view_stack")
+                .expect("Missing view_stack in UI file"),
         };
 
         // Sidebar row selection handler
@@ -80,9 +96,17 @@ impl SimpleComponent for AppModel {
         });
 
         // Back button/content visibility handler
-        widgets.split_view.connect_notify_local(Some("show-content"), move |s, _| {
-            sender.input(AppInput::ShowContent(s.shows_content()));
-        });
+        widgets
+            .split_view
+            .connect_notify_local(Some("show-content"), move |s, _| {
+                sender.input(AppInput::ShowContent(s.shows_content()));
+            });
+
+        model
+            .bt_worker
+            .sender()
+            .send(BluetoothWorkerInput::Connect)
+            .unwrap();
 
         ComponentParts { model, widgets }
     }
@@ -104,6 +128,20 @@ impl SimpleComponent for AppModel {
                     self.active_page = "home".into();
                 }
             }
+            AppInput::BluetoothEvent(output) => match output {
+                BluetoothWorkerOutput::DataReceived(data) => match data {
+                    BudsMessage::StatusUpdate(status) => {
+                        println!("Status Update: {:?}", status);
+                    }
+                    BudsMessage::ExtendedStatusUpdate(ext_status) => {
+                        println!("Extended Status Update: {:?}", ext_status);
+                    }
+                    BudsMessage::Unknown { id } => {
+                        println!("Unknown message ID: {}", id);
+                    }
+                },
+                _ => {}
+            },
         }
     }
 

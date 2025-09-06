@@ -1,5 +1,5 @@
 mod app;
-mod bluetooth;
+mod bluetooth_worker;
 
 use relm4::RelmApp;
 
