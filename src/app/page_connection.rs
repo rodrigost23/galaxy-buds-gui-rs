@@ -1,9 +1,7 @@
-use adw::prelude::{
-    ActionRowExt, NavigationPageExt, PreferencesGroupExt, PreferencesPageExt, PreferencesRowExt,
-};
+use adw::prelude::{ActionRowExt, NavigationPageExt, PreferencesGroupExt, PreferencesRowExt};
 use bluer::{Device, Session, Uuid};
-use futures::{future, pin_mut};
-use gtk4::prelude::{ActionableExt, ListBoxRowExt};
+use futures::future;
+use gtk4::prelude::ListBoxRowExt;
 use relm4::{
     AsyncComponentSender, FactorySender,
     component::{AsyncComponentParts, SimpleAsyncComponent},
@@ -69,7 +67,7 @@ pub enum PageConnectionInput {
 
 #[derive(Debug)]
 pub enum PageConnectionOutput {
-    Connect(DeviceInfo),
+    SelectDevice(DeviceInfo),
 }
 
 #[relm4::component(pub async)]
@@ -96,7 +94,7 @@ impl SimpleAsyncComponent for PageConnectionModel {
     }
 
     async fn init(
-        init: Self::Init,
+        _init: Self::Init,
         root: Self::Root,
         sender: AsyncComponentSender<Self>,
     ) -> AsyncComponentParts<Self> {
@@ -118,6 +116,7 @@ impl SimpleAsyncComponent for PageConnectionModel {
     async fn update(&mut self, message: Self::Input, sender: AsyncComponentSender<Self>) {
         match message {
             PageConnectionInput::LoadDevices => {
+                println!("PageConnectionInput::LoadDevices");
                 self.devices.guard().clear();
                 if let Ok(discovered_devices) = self.discover_galaxy_buds().await {
                     for dev in discovered_devices.iter() {
@@ -133,8 +132,9 @@ impl SimpleAsyncComponent for PageConnectionModel {
                     }
                 }
             }
+
             PageConnectionInput::SelectDevice(device_info) => {
-                sender.output(PageConnectionOutput::Connect(device_info));
+                let _ = sender.output(PageConnectionOutput::SelectDevice(device_info));
             }
         }
     }
