@@ -1,12 +1,11 @@
-use adw::prelude::{AdwApplicationWindowExt, NavigationPageExt};
+use adw::prelude::NavigationPageExt;
 use galaxy_buds_rs::message::{
     extended_status_updated::ExtendedStatusUpdate, status_updated::StatusUpdate,
 };
-use gtk4::prelude::GtkWindowExt;
 use relm4::{Component, ComponentParts, ComponentSender, SimpleComponent, WorkerController};
 
 use crate::{
-    buds_worker::{BluetoothWorker, BluetoothWorkerInput, BluetoothWorkerOutput},
+    buds_worker::{BluetoothWorker, BudsWorkerInput, BluetoothWorkerOutput},
     model::{buds_message::BudsMessage, device_info::DeviceInfo},
 };
 
@@ -69,9 +68,9 @@ impl SimpleComponent for PageManageModel {
     ) -> ComponentParts<Self> {
         let model = PageManageModel {
             active_page: "home".into(),
-            device,
+            device: device.clone(),
             bt_worker: BluetoothWorker::builder()
-                .detach_worker(())
+                .detach_worker(device.clone())
                 .forward(sender.input_sender(), PageManageInput::BluetoothEvent),
             connection_state: ConnectionState::Disconnected,
             buds_status: None,
@@ -136,10 +135,11 @@ impl SimpleComponent for PageManageModel {
                 if let ConnectionState::Disconnected | ConnectionState::Error(_) =
                     self.connection_state
                 {
+                    println!("PageManageInput::Connect");
                     self.connection_state = ConnectionState::Connecting;
                     self.bt_worker
                         .sender()
-                        .send(BluetoothWorkerInput::Connect)
+                        .send(BudsWorkerInput::Connect)
                         .unwrap();
                 }
             }

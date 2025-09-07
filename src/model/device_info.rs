@@ -1,12 +1,14 @@
-use bluer::DeviceProperty;
+use bluer::{Device, DeviceProperty};
 
 #[derive(Debug, Clone)]
 pub struct DeviceInfo {
     pub name: String,
+    pub device: Device,
 }
 
 impl DeviceInfo {
-    pub fn from_properties(props: Vec<DeviceProperty>) -> Self {
+    pub async fn from_device(device: Device) -> Self {
+        let props = device.all_properties().await.unwrap();
         let name = props
             .iter()
             .find_map(|prop| match prop {
@@ -15,6 +17,6 @@ impl DeviceInfo {
             })
             .unwrap_or_else(|| "Unknown Device".into());
 
-        DeviceInfo { name }
+        DeviceInfo { name, device }
     }
 }

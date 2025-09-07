@@ -119,8 +119,8 @@ impl SimpleAsyncComponent for PageConnectionModel {
                 println!("PageConnectionInput::LoadDevices");
                 self.devices.guard().clear();
                 if let Ok(discovered_devices) = self.discover_galaxy_buds().await {
-                    for dev in discovered_devices.iter() {
-                        let name = dev
+                    for device in discovered_devices.iter() {
+                        let name = device
                             .name()
                             .await
                             .ok()
@@ -128,7 +128,7 @@ impl SimpleAsyncComponent for PageConnectionModel {
                             .unwrap_or_else(|| "Unknown".into());
                         // let addr = dev.address().to_string();
 
-                        self.devices.guard().push_back(DeviceInfo { name });
+                        self.devices.guard().push_back(DeviceInfo { name, device: device.clone() });
                     }
                 }
             }
