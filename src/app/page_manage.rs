@@ -8,6 +8,7 @@ use relm4::{
 };
 
 use crate::{
+    app::dialog_find::DialogFindOutput,
     buds_worker::{BluetoothWorker, BudsWorkerInput, BudsWorkerOutput},
     model::{
         buds_message::{BudsCommand, BudsMessage},
@@ -79,10 +80,14 @@ pub enum PageManageInput {
     ShowContent(bool),
     BluetoothEvent(BudsWorkerOutput),
     BluetoothCommand(BudsCommand),
+    OpenFindDialog,
+    FindDialogCommand(DialogFindOutput),
 }
 
 #[derive(Debug)]
-pub enum PageManageOutput {}
+pub enum PageManageOutput {
+    OpenFindDialog,
+}
 
 #[relm4::component(pub)]
 impl SimpleComponent for PageManageModel {
@@ -196,18 +201,11 @@ impl SimpleComponent for PageManageModel {
 
                         },
                         adw::ActionRow {
-                            set_title: "Find Start",
+                            set_title: "Find my Buds",
                             #[watch]
                             set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
                             set_activatable: true,
-                            connect_activated => PageManageInput::BluetoothCommand(BudsCommand::FindStart),
-                        },
-                        adw::ActionRow {
-                            set_title: "Find Stop",
-                            #[watch]
-                            set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
-                            set_activatable: true,
-                            connect_activated => PageManageInput::BluetoothCommand(BudsCommand::FindStop),
+                            connect_activated => PageManageInput::OpenFindDialog,
                         },
                     }
                 }
@@ -217,7 +215,7 @@ impl SimpleComponent for PageManageModel {
 
     fn init(
         device: Self::Init,
-        window: Self::Root,
+        root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = PageManageModel {
@@ -237,7 +235,7 @@ impl SimpleComponent for PageManageModel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>) {
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>) {
         match message {
             PageManageInput::SelectRow(row_name) => {
                 self.active_page = match row_name.as_str() {
@@ -303,6 +301,9 @@ impl SimpleComponent for PageManageModel {
                     .sender()
                     .send(BudsWorkerInput::SendCommand(command))
                     .unwrap();
+            }
+            PageManageInput::OpenFindDialog => {
+                sender.output(PageManageOutput::OpenFindDialog).unwrap()
             }
         }
     }

@@ -1,4 +1,3 @@
-use adw::prelude::NavigationPageExt;
 use gtk4::prelude::GtkWindowExt;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, SimpleComponent,
@@ -7,8 +6,9 @@ use relm4::{
 
 use crate::{
     app::{
+        dialog_find::{DialogFind, DialogFindInput},
         page_connection::{PageConnectionModel, PageConnectionOutput},
-        page_manage::PageManageModel,
+        page_manage::{PageManageModel, PageManageOutput},
     },
     model::device_info::DeviceInfo,
 };
@@ -31,12 +31,14 @@ impl Page {
 
 pub struct AppModel {
     active_page: Page,
+    find_dialog: Controller<DialogFind>,
 }
 
 #[derive(Debug)]
 pub enum AppInput {
     SelectDevice(DeviceInfo),
     Disconnect,
+    FromPageManage(PageManageOutput),
 }
 
 #[derive(Debug)]
@@ -66,7 +68,7 @@ impl SimpleComponent for AppModel {
                     #[watch]
                     replace: &[model.active_page.widget().to_owned()],
                 }
-            }
+            },
         }
     }
 
@@ -75,8 +77,13 @@ impl SimpleComponent for AppModel {
         window: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let find_dialog = DialogFind::builder()
+            .launch(window.clone())
+            .forward(sender.input_sender(), |msg| match msg {});
+
         let model = AppModel {
             active_page: Page::Init(adw::NavigationPage::default()),
+            find_dialog,
         };
 
         let widgets = view_output!();
@@ -92,7 +99,7 @@ impl SimpleComponent for AppModel {
                 println!("AppInput::SelectDevice");
                 let page = PageManageModel::builder()
                     .launch(device)
-                    .forward(sender.input_sender(), |msg| match msg {});
+                    .forward(sender.input_sender(), AppInput::FromPageManage);
                 self.active_page = Page::Manage(page);
             }
             AppInput::Disconnect => {
@@ -106,6 +113,9 @@ impl SimpleComponent for AppModel {
                 );
                 self.active_page = Page::Connection(page);
             }
+            AppInput::FromPageManage(msg) => match msg {
+                PageManageOutput::OpenFindDialog => self.find_dialog.emit(DialogFindInput::Show),
+            },
         }
     }
 }
