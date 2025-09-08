@@ -2,7 +2,7 @@ use adw::prelude::{NavigationPageExt, PreferencesRowExt};
 use galaxy_buds_rs::message::{
     extended_status_updated::ExtendedStatusUpdate, status_updated::StatusUpdate,
 };
-use gtk4::prelude::{BoxExt, OrientableExt, WidgetExt};
+use gtk4::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::{
     Component, ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent, WorkerController,
 };
@@ -89,7 +89,7 @@ impl SimpleComponent for PageManageModel {
     view! {
         #[root]
         adw::NavigationPage {
-            set_title: "Connect",
+            set_title: model.device.name.as_str(),
 
             #[wrap(Some)]
             set_child = &adw::Clamp {
@@ -117,36 +117,54 @@ impl SimpleComponent for PageManageModel {
                             add_css_class: "title-1",
                         },
 
-                        gtk4::Box {
-                            set_orientation: gtk4::Orientation::Horizontal,
-                            set_halign: gtk4::Align::Center,
-                            set_spacing: 8,
+                        #[transition = "SlideUp"]
+                        match model.connection_state {
+                            ConnectionState::Connected => gtk4::Box {
+                                set_orientation: gtk4::Orientation::Horizontal,
+                                set_halign: gtk4::Align::Center,
+                                set_spacing: 8,
 
-                            gtk4::Box {
-                                set_spacing: 4,
+                                gtk4::Box {
+                                    set_spacing: 4,
 
-                                gtk4::Image {
-                                    set_icon_name: Some("audio-headphones-symbolic"),
+                                    gtk4::Image {
+                                        set_icon_name: Some("audio-headphones-symbolic"),
+                                    },
+
+                                    gtk4::Label {
+                                        #[watch]
+                                        set_label: model.buds_status.battery_text().as_str(),
+                                        add_css_class: "heading",
+                                    },
                                 },
 
-                                gtk4::Label {
-                                    set_label: model.buds_status.battery_text().as_str(),
-                                    add_css_class: "heading",
+                                gtk4::Box {
+                                    set_spacing: 4,
+
+                                    gtk4::Image {
+                                        set_icon_name: Some("printer-symbolic"),
+                                    },
+
+                                    gtk4::Label {
+                                        #[watch]
+                                        set_label: model.buds_status.case_battery_text().as_str(),
+                                        add_css_class: "heading",
+                                    },
                                 },
                             },
+                            ConnectionState::Connecting => gtk4::Label {
+                                set_label: "Connecting..."
+                            },
+                            ConnectionState::Disconnected | ConnectionState::Error(_) => gtk4::Box {
+                                set_orientation: gtk4::Orientation::Horizontal,
+                                set_halign: gtk4::Align::Center,
+                                set_spacing: 8,
 
-                            gtk4::Box {
-                                set_spacing: 4,
-
-                                gtk4::Image {
-                                    set_icon_name: Some("printer-symbolic"),
-                                },
-
-                                gtk4::Label {
-                                    #[watch]
-                                    set_label: model.buds_status.case_battery_text().as_str(),
-                                    add_css_class: "heading",
-                                },
+                                gtk4::Label { set_label: "Disconnected" },
+                                gtk4::Button {
+                                    set_label: "Connect",
+                                    connect_clicked => PageManageInput::Connect,
+                                }
                             },
                         },
                     },

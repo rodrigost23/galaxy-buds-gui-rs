@@ -1,3 +1,4 @@
+use adw::prelude::NavigationPageExt;
 use gtk4::prelude::GtkWindowExt;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, SimpleComponent,
@@ -11,9 +12,11 @@ use crate::{
     },
     model::device_info::DeviceInfo,
 };
+
 pub enum Page {
     Connection(AsyncController<PageConnectionModel>),
     Manage(Controller<PageManageModel>),
+    Init(adw::NavigationPage),
 }
 
 impl Page {
@@ -21,12 +24,12 @@ impl Page {
         match self {
             Page::Connection(controller) => controller.widget(),
             Page::Manage(controller) => controller.widget(),
+            Page::Init(page) => page,
         }
     }
 }
 
 pub struct AppModel {
-    // pages: AppPages,
     active_page: Page,
 }
 
@@ -50,6 +53,7 @@ impl SimpleComponent for AppModel {
     view! {
         #[root]
         adw::ApplicationWindow {
+            set_title: Some("Galaxy Buds Manager"),
             set_default_width: 800,
             set_default_height: 800,
 
@@ -71,17 +75,13 @@ impl SimpleComponent for AppModel {
         window: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let page_connection = PageConnectionModel::builder().launch(()).forward(
-            sender.input_sender(),
-            |msg| match msg {
-                PageConnectionOutput::SelectDevice(device) => AppInput::SelectDevice(device),
-            },
-        );
         let model = AppModel {
-            active_page: Page::Connection(page_connection),
+            active_page: Page::Init(adw::NavigationPage::default()),
         };
 
         let widgets = view_output!();
+
+        sender.input(AppInput::Disconnect);
 
         ComponentParts { model, widgets }
     }
@@ -95,7 +95,17 @@ impl SimpleComponent for AppModel {
                     .forward(sender.input_sender(), |msg| match msg {});
                 self.active_page = Page::Manage(page);
             }
-            AppInput::Disconnect => todo!(),
+            AppInput::Disconnect => {
+                let page = PageConnectionModel::builder().launch(()).forward(
+                    sender.input_sender(),
+                    |msg| match msg {
+                        PageConnectionOutput::SelectDevice(device) => {
+                            AppInput::SelectDevice(device)
+                        }
+                    },
+                );
+                self.active_page = Page::Connection(page);
+            }
         }
     }
 }
