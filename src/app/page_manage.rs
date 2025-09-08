@@ -2,7 +2,7 @@ use adw::prelude::{NavigationPageExt, PreferencesRowExt};
 use galaxy_buds_rs::message::{
     extended_status_updated::ExtendedStatusUpdate, status_updated::StatusUpdate,
 };
-use gtk4::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
+use gtk4::prelude::{BoxExt, ButtonExt, ListBoxRowExt, OrientableExt, WidgetExt};
 use relm4::{
     Component, ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent, WorkerController,
 };
@@ -171,8 +171,33 @@ impl SimpleComponent for PageManageModel {
 
                     adw::PreferencesGroup {
                         adw::ActionRow {
-                            set_title: "Settings"
-                        }
+                            set_title: "Noise control",
+                            #[watch]
+                            set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
+                            set_activatable: true,
+                            
+                        },
+                        adw::ActionRow {
+                            set_title: "Touch options",
+                            #[watch]
+                            set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
+                            set_activatable: true,
+                            
+                        },
+                        adw::ActionRow {
+                            set_title: "Equalizer",
+                            #[watch]
+                            set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
+                            set_activatable: true,
+                            
+                        },
+                        adw::ActionRow {
+                            set_title: "Find",
+                            #[watch]
+                            set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
+                            set_activatable: true,
+                            
+                        },
                     }
                 }
             }
