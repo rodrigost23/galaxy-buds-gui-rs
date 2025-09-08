@@ -13,7 +13,10 @@ use tokio::{
     time::sleep,
 };
 
-use crate::model::{buds_message::{BudsCommand, BudsMessage}, device_info::DeviceInfo};
+use crate::model::{
+    buds_message::{BudsCommand, BudsMessage},
+    device_info::DeviceInfo,
+};
 
 // --- Worker I/O ---
 
@@ -25,6 +28,7 @@ pub enum BudsWorkerInput {
     Disconnect,
     /// Sends a raw byte payload to the device.
     SendData(Vec<u8>),
+    SendCommand(BudsCommand),
 }
 
 #[derive(Debug)]
@@ -98,9 +102,7 @@ impl Worker for BluetoothWorker {
 
                             match BudsMessage::from_bytes(buff) {
                                 Some(msg) => {
-                                    sender
-                                        .output(BudsWorkerOutput::DataReceived(msg))
-                                        .unwrap();
+                                    sender.output(BudsWorkerOutput::DataReceived(msg)).unwrap();
                                 }
                                 None => continue,
                             };
@@ -140,8 +142,9 @@ impl Worker for BluetoothWorker {
                         *stream_guard = Some(stream);
                         sender.output(BudsWorkerOutput::Connected).unwrap();
 
-
-                        sender.input(BudsWorkerInput::SendData(BudsCommand::ManagerInfo.to_bytes()));
+                        sender.input(BudsWorkerInput::SendData(
+                            BudsCommand::ManagerInfo.to_bytes(),
+                        ));
                     }
                     Err(e) => {
                         sender
@@ -167,6 +170,9 @@ impl Worker for BluetoothWorker {
                             .output(BudsWorkerOutput::Error("Not connected".to_string()))
                             .unwrap();
                     }
+                }
+                BudsWorkerInput::SendCommand(cmd) => {
+                    sender.input(BudsWorkerInput::SendData(cmd.to_bytes()))
                 }
             }
         });

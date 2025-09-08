@@ -1,6 +1,7 @@
 use galaxy_buds_rs::{
     message::{
-        extended_status_updated::ExtendedStatusUpdate, ids, manager, status_updated::StatusUpdate, Message, Payload
+        Message, Payload, extended_status_updated::ExtendedStatusUpdate, find_my_bud, ids, manager,
+        status_updated::StatusUpdate,
     },
     model::Model,
 };
@@ -46,20 +47,17 @@ impl BudsMessage {
 #[derive(Debug)]
 pub enum BudsCommand {
     ManagerInfo,
-    Find,
+    FindStart,
+    FindStop,
 }
 
 impl BudsCommand {
     /// Serializes the command into a byte buffer to be sent to the device.
     pub fn to_bytes(&self) -> Vec<u8> {
         match self {
-            BudsCommand::ManagerInfo => {
-                let message = manager::new(true, 34);
-                message.to_byte_array()
-            }
-            BudsCommand::Find => {
-                todo!()
-            }
+            BudsCommand::ManagerInfo => manager::new(true, 34).to_byte_array(),
+            BudsCommand::FindStart => find_my_bud::new(true).to_byte_array(),
+            BudsCommand::FindStop => find_my_bud::new(false).to_byte_array(),
         }
     }
 }

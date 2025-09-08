@@ -1,4 +1,4 @@
-use adw::prelude::{NavigationPageExt, PreferencesRowExt};
+use adw::prelude::{ActionRowExt, NavigationPageExt, PreferencesRowExt};
 use galaxy_buds_rs::message::{
     extended_status_updated::ExtendedStatusUpdate, status_updated::StatusUpdate,
 };
@@ -8,8 +8,11 @@ use relm4::{
 };
 
 use crate::{
-    buds_worker::{BluetoothWorker, BudsWorkerOutput, BudsWorkerInput},
-    model::{buds_message::BudsMessage, device_info::DeviceInfo},
+    buds_worker::{BluetoothWorker, BudsWorkerInput, BudsWorkerOutput},
+    model::{
+        buds_message::{BudsCommand, BudsMessage},
+        device_info::DeviceInfo,
+    },
 };
 
 enum ConnectionState {
@@ -75,6 +78,7 @@ pub enum PageManageInput {
     SelectRow(String),
     ShowContent(bool),
     BluetoothEvent(BudsWorkerOutput),
+    BluetoothCommand(BudsCommand),
 }
 
 #[derive(Debug)]
@@ -175,28 +179,35 @@ impl SimpleComponent for PageManageModel {
                             #[watch]
                             set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
                             set_activatable: true,
-                            
+
                         },
                         adw::ActionRow {
                             set_title: "Touch options",
                             #[watch]
                             set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
                             set_activatable: true,
-                            
+
                         },
                         adw::ActionRow {
                             set_title: "Equalizer",
                             #[watch]
                             set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
                             set_activatable: true,
-                            
+
                         },
                         adw::ActionRow {
-                            set_title: "Find",
+                            set_title: "Find Start",
                             #[watch]
                             set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
                             set_activatable: true,
-                            
+                            connect_activated => PageManageInput::BluetoothCommand(BudsCommand::FindStart),
+                        },
+                        adw::ActionRow {
+                            set_title: "Find Stop",
+                            #[watch]
+                            set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
+                            set_activatable: true,
+                            connect_activated => PageManageInput::BluetoothCommand(BudsCommand::FindStop),
                         },
                     }
                 }
@@ -287,6 +298,12 @@ impl SimpleComponent for PageManageModel {
                 }
             }
             PageManageInput::Disconnect => todo!(),
+            PageManageInput::BluetoothCommand(command) => {
+                self.bt_worker
+                    .sender()
+                    .send(BudsWorkerInput::SendCommand(command))
+                    .unwrap();
+            }
         }
     }
 }
