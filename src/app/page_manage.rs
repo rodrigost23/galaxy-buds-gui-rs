@@ -1,11 +1,14 @@
-use adw::prelude::NavigationPageExt;
+use adw::prelude::{NavigationPageExt, PreferencesRowExt};
 use galaxy_buds_rs::message::{
     extended_status_updated::ExtendedStatusUpdate, status_updated::StatusUpdate,
 };
-use relm4::{Component, ComponentParts, ComponentSender, SimpleComponent, WorkerController};
+use gtk4::prelude::{BoxExt, OrientableExt, WidgetExt};
+use relm4::{
+    Component, ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent, WorkerController,
+};
 
 use crate::{
-    buds_worker::{BluetoothWorker, BudsWorkerInput, BluetoothWorkerOutput},
+    buds_worker::{BluetoothWorker, BluetoothWorkerOutput, BudsWorkerInput},
     model::{buds_message::BudsMessage, device_info::DeviceInfo},
 };
 
@@ -19,13 +22,49 @@ enum ConnectionState {
 enum BudsStatus {
     StatusUpdate(StatusUpdate),
     ExtendedStatusUpdate(ExtendedStatusUpdate),
+    None,
+}
+
+impl BudsStatus {
+    pub fn battery_text(&self) -> String {
+        let (battery_left, battery_right) = match self {
+            BudsStatus::StatusUpdate(s) => (
+                Some(s.battery_left.to_string()),
+                Some(s.battery_right.to_string()),
+            ),
+            BudsStatus::ExtendedStatusUpdate(s) => (
+                Some(s.battery_left.to_string()),
+                Some(s.battery_right.to_string()),
+            ),
+            _ => (None, None),
+        };
+
+        match (battery_left, battery_right) {
+            (Some(left), Some(right)) => {
+                if left == right {
+                    format!("L / R {}%", left)
+                } else {
+                    format!("L {}% / R {}%", left, right)
+                }
+            }
+            _ => "N/A".to_string(),
+        }
+    }
+
+    pub fn case_battery_text(&self) -> String {
+        match self {
+            BudsStatus::StatusUpdate(s) => format!("{}%", s.battery_case),
+            BudsStatus::ExtendedStatusUpdate(s) => format!("{}%", s.battery_case),
+            BudsStatus::None => "N/A".to_string(),
+        }
+    }
 }
 
 pub struct PageManageModel {
     active_page: String,
     bt_worker: WorkerController<BluetoothWorker>,
     connection_state: ConnectionState,
-    buds_status: Option<BudsStatus>,
+    buds_status: BudsStatus,
     device: DeviceInfo,
 }
 
@@ -54,8 +93,69 @@ impl SimpleComponent for PageManageModel {
 
             #[wrap(Some)]
             set_child = &adw::Clamp {
-                gtk4::Label {
-                    set_label: model.device.name.as_str()
+                gtk4::Box {
+                    set_orientation: gtk4::Orientation::Vertical,
+                    set_margin_horizontal: 4,
+                    set_margin_vertical: 8,
+                    set_spacing: 16,
+
+                    gtk4::Box {
+                        set_orientation: gtk4::Orientation::Vertical,
+                        set_margin_horizontal: 4,
+                        set_margin_vertical: 8,
+                        set_spacing: 16,
+
+                        gtk4::Image {
+                            set_icon_name: Some("image-missing"),
+                            set_icon_size: gtk4::IconSize::Large,
+                            set_pixel_size: 128,
+                        },
+
+                        gtk4::Label {
+                            #[watch]
+                            set_label: model.device.name.as_str(),
+                            add_css_class: "title-1",
+                        },
+
+                        gtk4::Box {
+                            set_orientation: gtk4::Orientation::Horizontal,
+                            set_halign: gtk4::Align::Center,
+                            set_spacing: 8,
+
+                            gtk4::Box {
+                                set_spacing: 4,
+
+                                gtk4::Image {
+                                    set_icon_name: Some("audio-headphones-symbolic"),
+                                },
+
+                                gtk4::Label {
+                                    set_label: model.buds_status.battery_text().as_str(),
+                                    add_css_class: "heading",
+                                },
+                            },
+
+                            gtk4::Box {
+                                set_spacing: 4,
+
+                                gtk4::Image {
+                                    set_icon_name: Some("printer-symbolic"),
+                                },
+
+                                gtk4::Label {
+                                    #[watch]
+                                    set_label: model.buds_status.case_battery_text().as_str(),
+                                    add_css_class: "heading",
+                                },
+                            },
+                        },
+                    },
+
+                    adw::PreferencesGroup {
+                        adw::ActionRow {
+                            set_title: "Settings"
+                        }
+                    }
                 }
             }
         }
@@ -73,7 +173,7 @@ impl SimpleComponent for PageManageModel {
                 .detach_worker(device.clone())
                 .forward(sender.input_sender(), PageManageInput::BluetoothEvent),
             connection_state: ConnectionState::Disconnected,
-            buds_status: None,
+            buds_status: BudsStatus::None,
         };
 
         let widgets = view_output!();
@@ -104,11 +204,11 @@ impl SimpleComponent for PageManageModel {
                 BluetoothWorkerOutput::DataReceived(data) => match data {
                     BudsMessage::StatusUpdate(status) => {
                         println!("Status Update: {:?}", status);
-                        self.buds_status = Some(BudsStatus::StatusUpdate(status));
+                        self.buds_status = BudsStatus::StatusUpdate(status);
                     }
                     BudsMessage::ExtendedStatusUpdate(ext_status) => {
                         println!("Extended Status Update: {:?}", ext_status);
-                        self.buds_status = Some(BudsStatus::ExtendedStatusUpdate(ext_status));
+                        self.buds_status = BudsStatus::ExtendedStatusUpdate(ext_status);
                     }
                     BudsMessage::Unknown { id, buffer: _ } => {
                         println!("Unknown message ID: {}", id);
