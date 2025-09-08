@@ -8,7 +8,7 @@ use relm4::{
 };
 
 use crate::{
-    buds_worker::{BluetoothWorker, BluetoothWorkerOutput, BudsWorkerInput},
+    buds_worker::{BluetoothWorker, BudsWorkerOutput, BudsWorkerInput},
     model::{buds_message::BudsMessage, device_info::DeviceInfo},
 };
 
@@ -74,7 +74,7 @@ pub enum PageManageInput {
     Disconnect,
     SelectRow(String),
     ShowContent(bool),
-    BluetoothEvent(BluetoothWorkerOutput),
+    BluetoothEvent(BudsWorkerOutput),
 }
 
 #[derive(Debug)]
@@ -244,7 +244,7 @@ impl SimpleComponent for PageManageModel {
                 }
             }
             PageManageInput::BluetoothEvent(output) => match output {
-                BluetoothWorkerOutput::DataReceived(data) => match data {
+                BudsWorkerOutput::DataReceived(data) => match data {
                     BudsMessage::StatusUpdate(status) => {
                         println!("Status Update: {:?}", status);
                         self.buds_status = BudsStatus::StatusUpdate(status);
@@ -257,19 +257,19 @@ impl SimpleComponent for PageManageModel {
                         println!("Unknown message ID: {}", id);
                     }
                 },
-                BluetoothWorkerOutput::Connected => {
+                BudsWorkerOutput::Connected => {
                     println!("Bluetooth connected");
                     self.connection_state = ConnectionState::Connected;
                 }
-                BluetoothWorkerOutput::Disconnected => {
+                BudsWorkerOutput::Disconnected => {
                     println!("Bluetooth disconnected");
                     self.connection_state = ConnectionState::Disconnected;
                 }
-                BluetoothWorkerOutput::Error(err) => {
+                BudsWorkerOutput::Error(err) => {
                     eprintln!("Bluetooth error: {}", err);
                     self.connection_state = ConnectionState::Error(err);
                 }
-                BluetoothWorkerOutput::Discovered(device) => {
+                BudsWorkerOutput::Discovered(device) => {
                     println!("Discovered device: {:?}", device);
                     self.device = device;
                 }

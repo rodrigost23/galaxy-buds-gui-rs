@@ -13,7 +13,7 @@ use tokio::{
     time::sleep,
 };
 
-use crate::model::{buds_message::BudsMessage, device_info::DeviceInfo};
+use crate::model::{buds_message::{BudsCommand, BudsMessage}, device_info::DeviceInfo};
 
 // --- Worker I/O ---
 
@@ -28,7 +28,7 @@ pub enum BudsWorkerInput {
 }
 
 #[derive(Debug)]
-pub enum BluetoothWorkerOutput {
+pub enum BudsWorkerOutput {
     Discovered(DeviceInfo),
     Connected,
     Disconnected,
@@ -59,7 +59,7 @@ pub struct BluetoothWorker {
 impl Worker for BluetoothWorker {
     type Init = DeviceInfo;
     type Input = BudsWorkerInput;
-    type Output = BluetoothWorkerOutput;
+    type Output = BudsWorkerOutput;
 
     fn init(device: Self::Init, sender: ComponentSender<Self>) -> Self {
         let runtime = Arc::new(
@@ -86,12 +86,12 @@ impl Worker for BluetoothWorker {
                     match stream.read(&mut buffer).await {
                         Ok(0) => {
                             sender
-                                .output(BluetoothWorkerOutput::Error(
+                                .output(BudsWorkerOutput::Error(
                                     "Stream closed by peer".to_string(),
                                 ))
                                 .unwrap();
                             *stream_guard = None; // Mark as disconnected.
-                            sender.output(BluetoothWorkerOutput::Disconnected).unwrap();
+                            sender.output(BudsWorkerOutput::Disconnected).unwrap();
                         }
                         Ok(n) => {
                             let buff = &buffer[..n];
@@ -99,7 +99,7 @@ impl Worker for BluetoothWorker {
                             match BudsMessage::from_bytes(buff) {
                                 Some(msg) => {
                                     sender
-                                        .output(BluetoothWorkerOutput::DataReceived(msg))
+                                        .output(BudsWorkerOutput::DataReceived(msg))
                                         .unwrap();
                                 }
                                 None => continue,
@@ -107,10 +107,10 @@ impl Worker for BluetoothWorker {
                         }
                         Err(e) => {
                             sender
-                                .output(BluetoothWorkerOutput::Error(format!("Read error: {}", e)))
+                                .output(BudsWorkerOutput::Error(format!("Read error: {}", e)))
                                 .unwrap();
                             *stream_guard = None; // Mark as disconnected.
-                            sender.output(BluetoothWorkerOutput::Disconnected).unwrap();
+                            sender.output(BudsWorkerOutput::Disconnected).unwrap();
                         }
                     }
                 } else {
@@ -138,30 +138,33 @@ impl Worker for BluetoothWorker {
                     Ok(stream) => {
                         let mut stream_guard = state.stream.lock().await;
                         *stream_guard = Some(stream);
-                        sender.output(BluetoothWorkerOutput::Connected).unwrap();
+                        sender.output(BudsWorkerOutput::Connected).unwrap();
+
+
+                        sender.input(BudsWorkerInput::SendData(BudsCommand::ManagerInfo.to_bytes()));
                     }
                     Err(e) => {
                         sender
-                            .output(BluetoothWorkerOutput::Error(e.to_string()))
+                            .output(BudsWorkerOutput::Error(e.to_string()))
                             .unwrap();
                     }
                 },
                 BudsWorkerInput::Disconnect => {
                     let mut stream_guard = state.stream.lock().await;
                     *stream_guard = None; // Dropping the stream closes the connection.
-                    sender.output(BluetoothWorkerOutput::Disconnected).unwrap();
+                    sender.output(BudsWorkerOutput::Disconnected).unwrap();
                 }
                 BudsWorkerInput::SendData(data) => {
                     let mut stream_guard = state.stream.lock().await;
                     if let Some(stream) = stream_guard.as_mut() {
                         if let Err(e) = stream.write_all(&data).await {
                             sender
-                                .output(BluetoothWorkerOutput::Error(e.to_string()))
+                                .output(BudsWorkerOutput::Error(e.to_string()))
                                 .unwrap();
                         }
                     } else {
                         sender
-                            .output(BluetoothWorkerOutput::Error("Not connected".to_string()))
+                            .output(BudsWorkerOutput::Error("Not connected".to_string()))
                             .unwrap();
                     }
                 }
