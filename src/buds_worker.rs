@@ -1,18 +1,21 @@
 use bluer::{
     Session,
-    rfcomm::{Profile, Role, Stream},
+    rfcomm::{
+        Profile, Role, Stream,
+        stream::{OwnedReadHalf, OwnedWriteHalf},
+    },
 };
 use futures::StreamExt;
 
-use relm4::{Worker, prelude::*};
+use relm4::{Sender, Worker, prelude::*};
 use std::{sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     runtime::Runtime,
     sync::Mutex,
-    time::{sleep, timeout},
+    time::timeout,
 };
-use tracing::{Level, debug, debug_span, error, event, info, span};
+use tracing::{debug, debug_span, error, info};
 
 use crate::model::{
     buds_message::{BudsCommand, BudsMessage},
@@ -51,7 +54,7 @@ struct WorkerState {
     // - `Arc`: An "Atomically Reference Counted" smart pointer. It allows multiple
     //   owners of the same data (the Mutex), making it possible to share the
     //   stream between the reader task and the `update` function.
-    stream: Arc<Mutex<Option<Stream>>>,
+    writer: Arc<Mutex<Option<OwnedWriteHalf>>>,
 }
 
 #[derive(Debug)]
@@ -66,7 +69,7 @@ impl Worker for BluetoothWorker {
     type Input = BudsWorkerInput;
     type Output = BudsWorkerOutput;
 
-    fn init(device: Self::Init, sender: ComponentSender<Self>) -> Self {
+    fn init(device: Self::Init, _sender: ComponentSender<Self>) -> Self {
         let runtime = Arc::new(
             tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
@@ -75,60 +78,8 @@ impl Worker for BluetoothWorker {
         );
 
         let state = WorkerState {
-            stream: Arc::new(Mutex::new(None)),
+            writer: Arc::new(Mutex::new(None)),
         };
-
-        let reader_state = state.clone();
-        let rt_handle = runtime.handle().clone();
-
-        // Spawn a persistent task to continuously read from the bluetooth stream.
-        rt_handle.spawn(async move {
-            loop {
-                let span = debug_span!("Stream read loop");
-                let mut buffer = [0u8; 2048];
-                let mut stream_guard = reader_state.stream.lock().await;
-
-                if let Some(stream) = stream_guard.as_mut() {
-                    match timeout(Duration::from_millis(100), stream.read(&mut buffer)).await {
-                        Ok(r) => match r {
-                            Ok(0) => {
-                                error!(parent: &span, "Stream closed by peer");
-                                sender
-                                    .output(BudsWorkerOutput::Error(
-                                        "Stream closed by peer".to_string(),
-                                    ))
-                                    .unwrap();
-                                *stream_guard = None; // Mark as disconnected.
-                                sender.output(BudsWorkerOutput::Disconnected).unwrap();
-                            }
-                            Ok(n) => {
-                                let buff = &buffer[..n];
-
-                                match BudsMessage::from_bytes(buff) {
-                                    Some(msg) => {
-                                        sender.output(BudsWorkerOutput::DataReceived(msg)).unwrap();
-                                    }
-                                    None => continue,
-                                };
-                            }
-                            Err(e) => {
-                                error!(parent: &span, "Read error {:?}", e);
-                                sender
-                                    .output(BudsWorkerOutput::Error(format!("Read error: {}", e)))
-                                    .unwrap();
-                                *stream_guard = None; // Mark as disconnected.
-                                sender.output(BudsWorkerOutput::Disconnected).unwrap();
-                            }
-                        },
-                        Err(_) => continue,
-                    }
-                } else {
-                    // Drop the lock before sleeping to allow other tasks to acquire it.
-                    drop(stream_guard);
-                    sleep(Duration::from_millis(50)).await;
-                }
-            }
-        });
 
         Self {
             device,
@@ -148,8 +99,12 @@ impl Worker for BluetoothWorker {
             match msg {
                 BudsWorkerInput::Connect => match self.connect_and_get_stream().await {
                     Ok(stream) => {
-                        let mut stream_guard = state.stream.lock().await;
-                        *stream_guard = Some(stream);
+                        let (reader, writer) = stream.into_split();
+                        let mut writer_guard = state.writer.lock().await;
+                        *writer_guard = Some(writer);
+
+                        relm4::spawn(read_task(reader, sender.output_sender().clone()));
+
                         sender.output(BudsWorkerOutput::Connected).unwrap();
 
                         sender.input(BudsWorkerInput::SendData(
@@ -163,8 +118,8 @@ impl Worker for BluetoothWorker {
                     }
                 },
                 BudsWorkerInput::Disconnect => {
-                    let mut stream_guard = state.stream.lock().await;
-                    *stream_guard = None; // Dropping the stream closes the connection.
+                    let mut writer_guard = state.writer.lock().await;
+                    *writer_guard = None; // Dropping the stream closes the connection.
                     sender.output(BudsWorkerOutput::Disconnected).unwrap();
                 }
                 BudsWorkerInput::SendData(data) => {
@@ -218,8 +173,8 @@ impl BluetoothWorker {
     // Send data to stream
     async fn send_data(&self, sender: &ComponentSender<BluetoothWorker>, data: Vec<u8>) {
         let state = self.state.clone();
-        let mut stream_guard = state.stream.lock().await;
-        if let Some(stream) = stream_guard.as_mut() {
+        let mut writer_guard = state.writer.lock().await;
+        if let Some(stream) = writer_guard.as_mut() {
             if let Err(e) = stream.write_all(&data).await {
                 sender
                     .output(BudsWorkerOutput::Error(e.to_string()))
@@ -231,4 +186,42 @@ impl BluetoothWorker {
                 .unwrap();
         }
     }
+}
+
+async fn read_task(mut stream: OwnedReadHalf, sender: Sender<BudsWorkerOutput>) {
+    let span = debug_span!("Stream read loop");
+    debug!(parent: &span, "Start reading");
+    loop {
+        let mut buffer = [0u8; 2048];
+
+        match stream.read(&mut buffer).await {
+            Ok(0) => {
+                error!(parent: &span, "Stream closed by peer");
+                sender
+                    .send(BudsWorkerOutput::Error("Stream closed by peer".to_string()))
+                    .unwrap();
+                sender.send(BudsWorkerOutput::Disconnected).unwrap();
+                break;
+            }
+            Ok(n) => {
+                let buff = &buffer[..n];
+
+                match BudsMessage::from_bytes(buff) {
+                    Some(msg) => {
+                        sender.send(BudsWorkerOutput::DataReceived(msg)).unwrap();
+                    }
+                    None => continue,
+                };
+            }
+            Err(e) => {
+                error!(parent: &span, "Read error {:?}", e);
+                sender
+                    .send(BudsWorkerOutput::Error(format!("Read error: {}", e)))
+                    .unwrap();
+                sender.send(BudsWorkerOutput::Disconnected).unwrap();
+                break;
+            }
+        }
+    }
+    debug!(parent: &span, "Stop reading");
 }
