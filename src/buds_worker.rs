@@ -12,7 +12,7 @@ use std::{sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     runtime::Runtime,
-    sync::Mutex,
+    sync::{Mutex, MutexGuard},
     time::timeout,
 };
 use tracing::{debug, debug_span, error, info};
@@ -90,52 +90,50 @@ impl Worker for BluetoothWorker {
 
     /// Handles discrete events from the UI. Each message is processed in a short-lived async task.
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
-        let span = debug_span!("BudsCommand", msg=?msg);
-        let state = self.state.clone();
-
-        debug!(parent: &span, "Try to block");
-        self.runtime.block_on(async {
-            debug!(parent: &span, "Blocked");
-            match msg {
-                BudsWorkerInput::Connect => match self.connect_and_get_stream().await {
-                    Ok(stream) => {
-                        let (reader, writer) = stream.into_split();
-                        let mut writer_guard = state.writer.lock().await;
-                        *writer_guard = Some(writer);
-
-                        relm4::spawn(read_task(reader, sender.output_sender().clone()));
-
-                        sender.output(BudsWorkerOutput::Connected).unwrap();
-
-                        sender.input(BudsWorkerInput::SendData(
-                            BudsCommand::ManagerInfo.to_bytes(),
-                        ));
-                    }
-                    Err(e) => {
-                        sender
-                            .output(BudsWorkerOutput::Error(e.to_string()))
-                            .unwrap();
-                    }
-                },
-                BudsWorkerInput::Disconnect => {
-                    let mut writer_guard = state.writer.lock().await;
-                    *writer_guard = None; // Dropping the stream closes the connection.
-                    sender.output(BudsWorkerOutput::Disconnected).unwrap();
-                }
-                BudsWorkerInput::SendData(data) => {
-                    self.send_data(&sender, data).await;
-                }
-                BudsWorkerInput::SendCommand(cmd) => {
-                    self.send_data(&sender, cmd.to_bytes()).await;
-                }
-            }
-
-            debug!(parent: &span, "Unblock");
-        });
+        self.runtime.block_on(self.handle_input(msg, sender));
     }
 }
 
 impl BluetoothWorker {
+    async fn handle_input(&self, msg: BudsWorkerInput, sender: ComponentSender<Self>) {
+        let span = debug_span!("BudsCommand", msg=?msg);
+        debug!(parent: &span, "start handle");
+        let state = self.state.clone();
+        let mut writer_guard = state.writer.lock().await;
+
+        match msg {
+            BudsWorkerInput::Connect => match self.connect_and_get_stream().await {
+                Ok(stream) => {
+                    // Split reader and writer streams
+                    let (reader, writer) = stream.into_split();
+                    *writer_guard = Some(writer);
+
+                    // Run reader loop in background
+                    relm4::spawn(read_task(reader, sender.output_sender().clone()));
+
+                    self.send_data(&sender, writer_guard, BudsCommand::ManagerInfo.to_bytes()).await;
+
+                    sender.output(BudsWorkerOutput::Connected).unwrap();
+                }
+                Err(e) => {
+                    sender
+                        .output(BudsWorkerOutput::Error(e.to_string()))
+                        .unwrap();
+                }
+            },
+            BudsWorkerInput::Disconnect => {
+                *writer_guard = None; // Dropping the stream closes the connection.
+                sender.output(BudsWorkerOutput::Disconnected).unwrap();
+            }
+            BudsWorkerInput::SendData(data) => {
+                self.send_data(&sender, writer_guard, data).await;
+            }
+            BudsWorkerInput::SendCommand(cmd) => {
+                self.send_data(&sender, writer_guard, cmd.to_bytes()).await;
+            }
+        }
+        debug!(parent: &span, "end handle");
+    }
     /// Performs the full bluetooth connection and profile registration dance.
     async fn connect_and_get_stream(
         &self,
@@ -171,9 +169,12 @@ impl BluetoothWorker {
     }
 
     // Send data to stream
-    async fn send_data(&self, sender: &ComponentSender<BluetoothWorker>, data: Vec<u8>) {
-        let state = self.state.clone();
-        let mut writer_guard = state.writer.lock().await;
+    async fn send_data(
+        &self,
+        sender: &ComponentSender<BluetoothWorker>,
+        mut writer_guard: MutexGuard<'_, Option<OwnedWriteHalf>>,
+        data: Vec<u8>,
+    ) {
         if let Some(stream) = writer_guard.as_mut() {
             if let Err(e) = stream.write_all(&data).await {
                 sender
