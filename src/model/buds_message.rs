@@ -47,8 +47,7 @@ impl BudsMessage {
 #[derive(Debug)]
 pub enum BudsCommand {
     ManagerInfo,
-    FindStart,
-    FindStop,
+    Find(bool),
 }
 
 impl BudsCommand {
@@ -56,8 +55,7 @@ impl BudsCommand {
     pub fn to_bytes(&self) -> Vec<u8> {
         match self {
             BudsCommand::ManagerInfo => manager::new(true, 34).to_byte_array(),
-            BudsCommand::FindStart => find_my_bud::new(true).to_byte_array(),
-            BudsCommand::FindStop => find_my_bud::new(false).to_byte_array(),
+            BudsCommand::Find(active) => find_my_bud::new(active.clone()).to_byte_array(),
         }
     }
 }

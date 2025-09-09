@@ -3,6 +3,7 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, SimpleComponent,
     prelude::{AsyncComponent, AsyncComponentController, AsyncController},
 };
+use tracing::{debug};
 
 use crate::{
     app::{
@@ -13,6 +14,7 @@ use crate::{
     model::device_info::DeviceInfo,
 };
 
+#[derive(Debug)]
 pub enum Page {
     Connection(AsyncController<PageConnectionModel>),
     Manage(Controller<PageManageModel>),
@@ -29,6 +31,7 @@ impl Page {
     }
 }
 
+#[derive(Debug)]
 pub struct AppModel {
     active_page: Page,
     find_dialog: Controller<DialogFind>,
@@ -97,7 +100,7 @@ impl SimpleComponent for AppModel {
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>) {
         match message {
             AppInput::SelectDevice(device) => {
-                println!("AppInput::SelectDevice");
+                debug!("{:?}", device);
                 let page = PageManageModel::builder()
                     .launch(device)
                     .forward(sender.input_sender(), AppInput::FromPageManage);

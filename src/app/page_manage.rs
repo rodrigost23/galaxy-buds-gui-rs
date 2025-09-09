@@ -7,6 +7,8 @@ use relm4::{
     Component, ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent, WorkerController,
 };
 
+use tracing::{debug, error};
+
 use crate::{
     app::dialog_find::DialogFindOutput,
     buds_worker::{BluetoothWorker, BudsWorkerInput, BudsWorkerOutput},
@@ -16,6 +18,7 @@ use crate::{
     },
 };
 
+#[derive(Debug)]
 enum ConnectionState {
     Connected,
     Disconnected,
@@ -23,6 +26,7 @@ enum ConnectionState {
     Error(String),
 }
 
+#[derive(Debug)]
 enum BudsStatus {
     StatusUpdate(StatusUpdate),
     ExtendedStatusUpdate(ExtendedStatusUpdate),
@@ -64,6 +68,7 @@ impl BudsStatus {
     }
 }
 
+#[derive(Debug)]
 pub struct PageManageModel {
     active_page: String,
     bt_worker: WorkerController<BluetoothWorker>,
@@ -255,31 +260,31 @@ impl SimpleComponent for PageManageModel {
             PageManageInput::BluetoothEvent(output) => match output {
                 BudsWorkerOutput::DataReceived(data) => match data {
                     BudsMessage::StatusUpdate(status) => {
-                        println!("Status Update: {:?}", status);
+                        debug!("Status Update: {:?}", status);
                         self.buds_status = BudsStatus::StatusUpdate(status);
                     }
                     BudsMessage::ExtendedStatusUpdate(ext_status) => {
-                        println!("Extended Status Update: {:?}", ext_status);
+                        debug!("Extended Status Update: {:?}", ext_status);
                         self.buds_status = BudsStatus::ExtendedStatusUpdate(ext_status);
                     }
                     BudsMessage::Unknown { id, buffer: _ } => {
-                        println!("Unknown message ID: {}", id);
+                        debug!("Unknown message ID: {}", id);
                     }
                 },
                 BudsWorkerOutput::Connected => {
-                    println!("Bluetooth connected");
+                    debug!("Bluetooth connected");
                     self.connection_state = ConnectionState::Connected;
                 }
                 BudsWorkerOutput::Disconnected => {
-                    println!("Bluetooth disconnected");
+                    debug!("Bluetooth disconnected");
                     self.connection_state = ConnectionState::Disconnected;
                 }
                 BudsWorkerOutput::Error(err) => {
-                    eprintln!("Bluetooth error: {}", err);
+                    error!("Bluetooth error: {}", err);
                     self.connection_state = ConnectionState::Error(err);
                 }
                 BudsWorkerOutput::Discovered(device) => {
-                    println!("Discovered device: {:?}", device);
+                    debug!("Discovered device: {:?}", device);
                     self.device = device;
                 }
             },
@@ -287,7 +292,7 @@ impl SimpleComponent for PageManageModel {
                 if let ConnectionState::Disconnected | ConnectionState::Error(_) =
                     self.connection_state
                 {
-                    println!("PageManageInput::Connect");
+                    debug!("PageManageInput::Connect");
                     self.connection_state = ConnectionState::Connecting;
                     self.bt_worker
                         .sender()
@@ -306,12 +311,9 @@ impl SimpleComponent for PageManageModel {
                 sender.output(PageManageOutput::OpenFindDialog).unwrap()
             }
             PageManageInput::FindDialogCommand(cmd) => {
-                sender.input(PageManageInput::BluetoothCommand(
-                    match cmd {
-                        DialogFindOutput::Start => BudsCommand::FindStart,
-                        DialogFindOutput::Stop => BudsCommand::FindStop,
-                    },
-                ));
+                sender.input(PageManageInput::BluetoothCommand(match cmd {
+                    DialogFindOutput::Find(active) => BudsCommand::Find(active),
+                }));
             }
         }
     }

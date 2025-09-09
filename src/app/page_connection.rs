@@ -7,6 +7,7 @@ use relm4::{
     component::{AsyncComponentParts, SimpleAsyncComponent},
     prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque},
 };
+use tracing::{debug};
 
 use crate::model::device_info::DeviceInfo;
 
@@ -55,6 +56,7 @@ impl FactoryComponent for DeviceComponent {
     }
 }
 
+#[derive(Debug)]
 pub struct PageConnectionModel {
     devices: FactoryVecDeque<DeviceComponent>,
 }
@@ -116,16 +118,19 @@ impl SimpleAsyncComponent for PageConnectionModel {
     async fn update(&mut self, message: Self::Input, sender: AsyncComponentSender<Self>) {
         match message {
             PageConnectionInput::LoadDevices => {
-                println!("PageConnectionInput::LoadDevices");
+                debug!("PageConnectionInput::LoadDevices");
                 self.devices.guard().clear();
                 if let Ok(discovered_devices) = self.discover_galaxy_buds().await {
                     for device in discovered_devices.iter() {
-                        self.devices.guard().push_back(DeviceInfo::from_device(device.clone()).await);
+                        self.devices
+                            .guard()
+                            .push_back(DeviceInfo::from_device(device.clone()).await);
                     }
                 }
             }
 
             PageConnectionInput::SelectDevice(device_info) => {
+                debug!("Selected device");
                 let _ = sender.output(PageConnectionOutput::SelectDevice(device_info));
             }
         }
@@ -163,13 +168,9 @@ impl PageConnectionModel {
             .flatten()
             .collect();
 
-        // Log the found devices to the console.
+        // Log the found devices.
         for device in &found_devices {
-            if let Ok(Some(name)) = device.name().await {
-                println!("Found Galaxy Buds: {}", name);
-            } else {
-                println!("Found Galaxy Buds with unknown name: {}", device.address());
-            }
+            debug!(device = ?device, "Found device");
         }
 
         Ok(found_devices)

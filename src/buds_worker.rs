@@ -12,6 +12,7 @@ use tokio::{
     sync::Mutex,
     time::sleep,
 };
+use tracing::{debug, error, info};
 
 use crate::model::{
     buds_message::{BudsCommand, BudsMessage},
@@ -42,7 +43,7 @@ pub enum BudsWorkerOutput {
 
 // --- Worker Implementation ---
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct WorkerState {
     // The RFCOMM stream is wrapped in several layers for safe concurrent access:
     // - `Option`: The stream only exists when we are connected.
@@ -54,6 +55,7 @@ struct WorkerState {
     stream: Arc<Mutex<Option<Stream>>>,
 }
 
+#[derive(Debug)]
 pub struct BluetoothWorker {
     device: DeviceInfo,
     state: WorkerState,
@@ -188,9 +190,9 @@ impl BluetoothWorker {
         let session = Session::new().await?;
         let device = self.device.device.clone();
 
-        println!("Connecting to device...");
+        debug!("Connecting to device...");
         device.connect().await?;
-        println!("Connected.");
+        info!("Connected.");
 
         let spp_uuid = bluer::id::ServiceClass::SerialPort.into();
         let profile = Profile {
@@ -202,14 +204,15 @@ impl BluetoothWorker {
             ..Default::default()
         };
         let mut handle = session.register_profile(profile).await?;
-        println!("SPP Profile registered. Waiting for connection...");
+        debug!("SPP Profile registered. Waiting for connection...");
 
         if let Some(req) = handle.next().await {
-            println!("Connection request from {:?} accepted.", req.device());
+            debug!("Connection request from {:?} accepted.", req.device());
             let stream = req.accept()?;
-            println!("RFCOMM stream established.");
+            info!("RFCOMM stream established.");
             Ok(stream)
         } else {
+            error!("No connection request received");
             Err("No connection request received".into())
         }
     }
