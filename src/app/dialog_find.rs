@@ -1,5 +1,5 @@
 use adw::prelude::{AdwDialogExt, AlertDialogExt};
-use gtk4::prelude::WidgetExt;
+use gtk4::prelude::{ToggleButtonExt, WidgetExt};
 use relm4::{ComponentParts, ComponentSender, SimpleComponent, gtk};
 
 pub struct DialogFind {
@@ -10,10 +10,14 @@ pub struct DialogFind {
 #[derive(Debug)]
 pub enum DialogFindInput {
     Show,
+    Toggle(bool),
 }
 
 #[derive(Debug)]
-pub enum DialogFindOutput {}
+pub enum DialogFindOutput {
+    Start,
+    Stop,
+}
 
 #[relm4::component(pub)]
 impl SimpleComponent for DialogFind {
@@ -31,12 +35,16 @@ impl SimpleComponent for DialogFind {
             set_close_response: "close",
 
             #[wrap(Some)]
+            #[name="toggle"]
             set_extra_child = &gtk4::ToggleButton {
                 add_css_class: "suggested-action",
+                connect_toggled[sender] => move |btn| {
+                    sender.input(DialogFindInput::Toggle(btn.is_active()))
+                },
 
                 adw::ButtonContent {
-                    set_icon_name: "find-location-symbolic",
-                    set_label: "Start"
+                    #[watch]
+                    set_label: if toggle.is_active() { "Start" }  else { "Stop" }
                 }
             },
         }
@@ -61,6 +69,13 @@ impl SimpleComponent for DialogFind {
             DialogFindInput::Show => {
                 self.is_visible = true;
             }
+            DialogFindInput::Toggle(active) => sender
+                .output(if active {
+                    DialogFindOutput::Start
+                } else {
+                    DialogFindOutput::Stop
+                })
+                .unwrap(),
         }
     }
 

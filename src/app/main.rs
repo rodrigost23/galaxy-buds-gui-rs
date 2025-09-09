@@ -6,9 +6,9 @@ use relm4::{
 
 use crate::{
     app::{
-        dialog_find::{DialogFind, DialogFindInput},
+        dialog_find::{DialogFind, DialogFindInput, DialogFindOutput},
         page_connection::{PageConnectionModel, PageConnectionOutput},
-        page_manage::{PageManageModel, PageManageOutput},
+        page_manage::{PageManageInput, PageManageModel, PageManageOutput},
     },
     model::device_info::DeviceInfo,
 };
@@ -39,6 +39,7 @@ pub enum AppInput {
     SelectDevice(DeviceInfo),
     Disconnect,
     FromPageManage(PageManageOutput),
+    FromDialogFind(DialogFindOutput),
 }
 
 #[derive(Debug)]
@@ -79,7 +80,7 @@ impl SimpleComponent for AppModel {
     ) -> ComponentParts<Self> {
         let find_dialog = DialogFind::builder()
             .launch(window.clone())
-            .forward(sender.input_sender(), |msg| match msg {});
+            .forward(sender.input_sender(), AppInput::FromDialogFind);
 
         let model = AppModel {
             active_page: Page::Init(adw::NavigationPage::default()),
@@ -116,6 +117,11 @@ impl SimpleComponent for AppModel {
             AppInput::FromPageManage(msg) => match msg {
                 PageManageOutput::OpenFindDialog => self.find_dialog.emit(DialogFindInput::Show),
             },
+            AppInput::FromDialogFind(msg) => {
+                if let Page::Manage(page) = &self.active_page {
+                    page.emit(PageManageInput::FindDialogCommand(msg));
+                }
+            }
         }
     }
 }

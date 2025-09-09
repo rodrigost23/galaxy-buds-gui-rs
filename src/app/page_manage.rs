@@ -305,6 +305,14 @@ impl SimpleComponent for PageManageModel {
             PageManageInput::OpenFindDialog => {
                 sender.output(PageManageOutput::OpenFindDialog).unwrap()
             }
+            PageManageInput::FindDialogCommand(cmd) => {
+                sender.input(PageManageInput::BluetoothCommand(
+                    match cmd {
+                        DialogFindOutput::Start => BudsCommand::FindStart,
+                        DialogFindOutput::Stop => BudsCommand::FindStop,
+                    },
+                ));
+            }
         }
     }
 }
