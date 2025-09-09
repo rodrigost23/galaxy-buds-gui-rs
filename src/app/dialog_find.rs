@@ -43,7 +43,7 @@ impl SimpleComponent for DialogFind {
                     sender.input(DialogFindInput::Toggle(btn.is_active()))
                 },
                 #[watch]
-                set_label: if toggle.is_active() { "Start" }  else { "Stop" },
+                set_label: if toggle.is_active() { "Stop" }  else { "Start" },
             },
         }
     }

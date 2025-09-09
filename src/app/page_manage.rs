@@ -283,10 +283,6 @@ impl SimpleComponent for PageManageModel {
                     error!("Bluetooth error: {}", err);
                     self.connection_state = ConnectionState::Error(err);
                 }
-                BudsWorkerOutput::Discovered(device) => {
-                    debug!("Discovered device: {:?}", device);
-                    self.device = device;
-                }
             },
             PageManageInput::Connect => {
                 if let ConnectionState::Disconnected | ConnectionState::Error(_) =

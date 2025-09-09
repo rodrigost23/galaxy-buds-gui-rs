@@ -10,9 +10,9 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     runtime::Runtime,
     sync::Mutex,
-    time::sleep,
+    time::{sleep, timeout},
 };
-use tracing::{debug, error, info};
+use tracing::{Level, debug, debug_span, error, event, info, span};
 
 use crate::model::{
     buds_message::{BudsCommand, BudsMessage},
@@ -34,7 +34,6 @@ pub enum BudsWorkerInput {
 
 #[derive(Debug)]
 pub enum BudsWorkerOutput {
-    Discovered(DeviceInfo),
     Connected,
     Disconnected,
     DataReceived(BudsMessage),
@@ -85,37 +84,43 @@ impl Worker for BluetoothWorker {
         // Spawn a persistent task to continuously read from the bluetooth stream.
         rt_handle.spawn(async move {
             loop {
+                let span = debug_span!("Stream read loop");
                 let mut buffer = [0u8; 2048];
                 let mut stream_guard = reader_state.stream.lock().await;
 
                 if let Some(stream) = stream_guard.as_mut() {
-                    match stream.read(&mut buffer).await {
-                        Ok(0) => {
-                            sender
-                                .output(BudsWorkerOutput::Error(
-                                    "Stream closed by peer".to_string(),
-                                ))
-                                .unwrap();
-                            *stream_guard = None; // Mark as disconnected.
-                            sender.output(BudsWorkerOutput::Disconnected).unwrap();
-                        }
-                        Ok(n) => {
-                            let buff = &buffer[..n];
+                    match timeout(Duration::from_millis(100), stream.read(&mut buffer)).await {
+                        Ok(r) => match r {
+                            Ok(0) => {
+                                error!(parent: &span, "Stream closed by peer");
+                                sender
+                                    .output(BudsWorkerOutput::Error(
+                                        "Stream closed by peer".to_string(),
+                                    ))
+                                    .unwrap();
+                                *stream_guard = None; // Mark as disconnected.
+                                sender.output(BudsWorkerOutput::Disconnected).unwrap();
+                            }
+                            Ok(n) => {
+                                let buff = &buffer[..n];
 
-                            match BudsMessage::from_bytes(buff) {
-                                Some(msg) => {
-                                    sender.output(BudsWorkerOutput::DataReceived(msg)).unwrap();
-                                }
-                                None => continue,
-                            };
-                        }
-                        Err(e) => {
-                            sender
-                                .output(BudsWorkerOutput::Error(format!("Read error: {}", e)))
-                                .unwrap();
-                            *stream_guard = None; // Mark as disconnected.
-                            sender.output(BudsWorkerOutput::Disconnected).unwrap();
-                        }
+                                match BudsMessage::from_bytes(buff) {
+                                    Some(msg) => {
+                                        sender.output(BudsWorkerOutput::DataReceived(msg)).unwrap();
+                                    }
+                                    None => continue,
+                                };
+                            }
+                            Err(e) => {
+                                error!(parent: &span, "Read error {:?}", e);
+                                sender
+                                    .output(BudsWorkerOutput::Error(format!("Read error: {}", e)))
+                                    .unwrap();
+                                *stream_guard = None; // Mark as disconnected.
+                                sender.output(BudsWorkerOutput::Disconnected).unwrap();
+                            }
+                        },
+                        Err(_) => continue,
                     }
                 } else {
                     // Drop the lock before sleeping to allow other tasks to acquire it.
@@ -134,11 +139,14 @@ impl Worker for BluetoothWorker {
 
     /// Handles discrete events from the UI. Each message is processed in a short-lived async task.
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+        let span = debug_span!("BudsCommand", msg=?msg);
         let state = self.state.clone();
+
+        debug!(parent: &span, "Try to block");
         self.runtime.block_on(async {
+            debug!(parent: &span, "Blocked");
             match msg {
-                BudsWorkerInput::Connect => match self.connect_and_get_stream(sender.clone()).await
-                {
+                BudsWorkerInput::Connect => match self.connect_and_get_stream().await {
                     Ok(stream) => {
                         let mut stream_guard = state.stream.lock().await;
                         *stream_guard = Some(stream);
@@ -160,23 +168,14 @@ impl Worker for BluetoothWorker {
                     sender.output(BudsWorkerOutput::Disconnected).unwrap();
                 }
                 BudsWorkerInput::SendData(data) => {
-                    let mut stream_guard = state.stream.lock().await;
-                    if let Some(stream) = stream_guard.as_mut() {
-                        if let Err(e) = stream.write_all(&data).await {
-                            sender
-                                .output(BudsWorkerOutput::Error(e.to_string()))
-                                .unwrap();
-                        }
-                    } else {
-                        sender
-                            .output(BudsWorkerOutput::Error("Not connected".to_string()))
-                            .unwrap();
-                    }
+                    self.send_data(&sender, data).await;
                 }
                 BudsWorkerInput::SendCommand(cmd) => {
-                    sender.input(BudsWorkerInput::SendData(cmd.to_bytes()))
+                    self.send_data(&sender, cmd.to_bytes()).await;
                 }
             }
+
+            debug!(parent: &span, "Unblock");
         });
     }
 }
@@ -185,7 +184,6 @@ impl BluetoothWorker {
     /// Performs the full bluetooth connection and profile registration dance.
     async fn connect_and_get_stream(
         &self,
-        sender: ComponentSender<BluetoothWorker>,
     ) -> Result<Stream, Box<dyn std::error::Error + Send + Sync>> {
         let session = Session::new().await?;
         let device = self.device.device.clone();
@@ -214,6 +212,23 @@ impl BluetoothWorker {
         } else {
             error!("No connection request received");
             Err("No connection request received".into())
+        }
+    }
+
+    // Send data to stream
+    async fn send_data(&self, sender: &ComponentSender<BluetoothWorker>, data: Vec<u8>) {
+        let state = self.state.clone();
+        let mut stream_guard = state.stream.lock().await;
+        if let Some(stream) = stream_guard.as_mut() {
+            if let Err(e) = stream.write_all(&data).await {
+                sender
+                    .output(BudsWorkerOutput::Error(e.to_string()))
+                    .unwrap();
+            }
+        } else {
+            sender
+                .output(BudsWorkerOutput::Error("Not connected".to_string()))
+                .unwrap();
         }
     }
 }
