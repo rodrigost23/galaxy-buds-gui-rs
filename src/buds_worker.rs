@@ -8,12 +8,11 @@ use bluer::{
 use futures::StreamExt;
 
 use relm4::{Sender, Worker, prelude::*};
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     runtime::Runtime,
     sync::{Mutex, MutexGuard},
-    time::timeout,
 };
 use tracing::{debug, debug_span, error, info};
 
@@ -88,12 +87,13 @@ impl Worker for BluetoothWorker {
 
     /// Handles discrete events from the UI. Each message is processed in a short-lived async task.
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
-        self.runtime.block_on(self.handle_input(msg, &sender));
+        self.runtime
+            .block_on(self.handle_input(msg, sender.output_sender()));
     }
 }
 
 impl BluetoothWorker {
-    async fn handle_input(&self, msg: BudsWorkerInput, sender: &ComponentSender<Self>) {
+    async fn handle_input(&self, msg: BudsWorkerInput, sender: &Sender<<Self as Worker>::Output>) {
         let span = debug_span!("BudsCommand", msg=?msg);
         debug!(parent: &span, "start handle");
         let writer = self.writer.clone();
@@ -107,22 +107,20 @@ impl BluetoothWorker {
                     *writer_guard = Some(writer);
 
                     // Run reader loop in background
-                    relm4::spawn(read_task(reader, sender.output_sender().clone()));
+                    relm4::spawn(read_task(reader, sender.clone()));
 
                     self.send_data(&sender, writer_guard, BudsCommand::ManagerInfo.to_bytes())
                         .await;
 
-                    sender.output(BudsWorkerOutput::Connected).unwrap();
+                    sender.send(BudsWorkerOutput::Connected).unwrap();
                 }
                 Err(e) => {
-                    sender
-                        .output(BudsWorkerOutput::Error(e.to_string()))
-                        .unwrap();
+                    sender.send(BudsWorkerOutput::Error(e.to_string())).unwrap();
                 }
             },
             BudsWorkerInput::Disconnect => {
                 *writer_guard = None; // Dropping the stream closes the connection.
-                sender.output(BudsWorkerOutput::Disconnected).unwrap();
+                sender.send(BudsWorkerOutput::Disconnected).unwrap();
             }
             BudsWorkerInput::SendData(data) => {
                 self.send_data(&sender, writer_guard, data).await;
@@ -170,19 +168,17 @@ impl BluetoothWorker {
     // Send data to stream
     async fn send_data(
         &self,
-        sender: &ComponentSender<BluetoothWorker>,
+        sender: &Sender<<BluetoothWorker as Worker>::Output>,
         mut writer_guard: MutexGuard<'_, Option<OwnedWriteHalf>>,
         data: Vec<u8>,
     ) {
         if let Some(stream) = writer_guard.as_mut() {
             if let Err(e) = stream.write_all(&data).await {
-                sender
-                    .output(BudsWorkerOutput::Error(e.to_string()))
-                    .unwrap();
+                sender.send(BudsWorkerOutput::Error(e.to_string())).unwrap();
             }
         } else {
             sender
-                .output(BudsWorkerOutput::Error("Not connected".to_string()))
+                .send(BudsWorkerOutput::Error("Not connected".to_string()))
                 .unwrap();
         }
     }
