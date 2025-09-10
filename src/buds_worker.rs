@@ -6,21 +6,26 @@ use bluer::{
     },
 };
 use futures::StreamExt;
-
 use relm4::{Sender, Worker, prelude::*};
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     runtime::Runtime,
     sync::Mutex,
 };
-use tracing::{debug, debug_span, error, info, trace};
+use tracing::{debug, debug_span, error, info, trace, warn};
 
 use crate::model::{
     buds_message::{BudsCommand, BudsMessage},
     device_info::DeviceInfo,
 };
 
+const READ_BUFFER_SIZE: usize = 2048;
+
+/// Input messages for the `BluetoothWorker`.
 #[derive(Debug)]
 pub enum BudsWorkerInput {
     /// Starts the discovery and connection process.
@@ -29,22 +34,31 @@ pub enum BudsWorkerInput {
     Disconnect,
     /// Sends a raw byte payload to the device.
     SendData(Vec<u8>),
+    /// Encodes and sends a `BudsCommand` to the device.
     SendCommand(BudsCommand),
 }
 
+/// Output messages from the `BluetoothWorker`.
 #[derive(Debug)]
 pub enum BudsWorkerOutput {
+    /// Emitted when a connection is successfully established.
     Connected,
+    /// Emitted when the device is disconnected.
     Disconnected,
+    /// Emitted when a `BudsMessage` is received from the device.
     DataReceived(BudsMessage),
+    /// Emitted when an error occurs.
     Error(String),
 }
 
+/// A `relm4::Worker` that manages the Bluetooth connection and communication
+/// with a Galaxy Buds device.
 #[derive(Debug)]
 pub struct BluetoothWorker {
     device: DeviceInfo,
     writer: Arc<Mutex<Option<OwnedWriteHalf>>>,
     runtime: Arc<Runtime>,
+    is_running: Arc<AtomicBool>,
 }
 
 impl Worker for BluetoothWorker {
@@ -61,11 +75,13 @@ impl Worker for BluetoothWorker {
         );
 
         let writer = Arc::new(Mutex::new(None));
+        let is_running = Arc::new(AtomicBool::new(false));
 
         Self {
             device,
             writer,
             runtime,
+            is_running,
         }
     }
 
@@ -77,6 +93,7 @@ impl Worker for BluetoothWorker {
 }
 
 impl BluetoothWorker {
+    /// Asynchronously handles an input message.
     async fn handle_input(&self, msg: BudsWorkerInput, sender: &Sender<<Self as Worker>::Output>) {
         let span = debug_span!("BudsCommand", msg=?msg);
         debug!(parent: &span, "start handle");
@@ -84,15 +101,20 @@ impl BluetoothWorker {
         match msg {
             BudsWorkerInput::Connect => self.connect(sender).await,
             BudsWorkerInput::Disconnect => {
-                *self.writer.lock().await = None; // Dropping the stream closes the connection.
-                sender.send(BudsWorkerOutput::Disconnected).unwrap();
+                self.is_running.store(false, Ordering::Relaxed);
+                // Dropping the writer will close the connection, causing the read task to terminate.
+                *self.writer.lock().await = None;
+                if sender.send(BudsWorkerOutput::Disconnected).is_err() {
+                    warn!("UI receiver dropped, could not send Disconnected message.");
+                }
             }
-            BudsWorkerInput::SendData(data) => self.send_data(&sender, data).await,
-            BudsWorkerInput::SendCommand(cmd) => self.send_data(&sender, cmd.to_bytes()).await,
+            BudsWorkerInput::SendData(data) => self.send_data(sender, data).await,
+            BudsWorkerInput::SendCommand(cmd) => self.send_data(sender, cmd.to_bytes()).await,
         }
         debug!(parent: &span, "end handle");
     }
 
+    /// Establishes a connection and spawns the reading task.
     async fn connect(&self, sender: &Sender<BudsWorkerOutput>) {
         match self.connect_and_get_stream().await {
             Ok(stream) => {
@@ -101,29 +123,42 @@ impl BluetoothWorker {
                 *self.writer.lock().await = Some(writer);
 
                 // Run reader loop in background
-                relm4::spawn(read_task(reader, sender.clone()));
 
+                self.is_running.store(true, Ordering::Relaxed);
+                relm4::spawn(read_task(
+                    reader,
+                    sender.clone(),
+                    Arc::clone(&self.is_running),
+                ));
+
+                // Request manager info after connecting
                 self.send_data(&sender, BudsCommand::ManagerInfo.to_bytes())
                     .await;
 
-                sender.send(BudsWorkerOutput::Connected).unwrap();
+                if sender.send(BudsWorkerOutput::Connected).is_err() {
+                    warn!("UI receiver dropped, could not send Connected message.");
+                }
             }
             Err(e) => {
-                sender.send(BudsWorkerOutput::Error(e.to_string())).unwrap();
+                let err_msg = format!("Connection failed: {}", e);
+                error!("{}", err_msg);
+                if sender.send(BudsWorkerOutput::Error(err_msg)).is_err() {
+                    warn!("UI receiver dropped, could not send Error message.");
+                }
             }
         }
     }
 
-    /// Performs the full bluetooth connection and profile registration dance.
+    /// Performs the full Bluetooth connection and profile registration dance.
     async fn connect_and_get_stream(
         &self,
     ) -> Result<Stream, Box<dyn std::error::Error + Send + Sync>> {
         let session = Session::new().await?;
         let device = self.device.device.clone();
 
-        debug!("Connecting to device...");
+        debug!("Connecting to device {}...", device.address());
         device.connect().await?;
-        info!("Connected.");
+        info!("Device connected.");
 
         let spp_uuid = bluer::id::ServiceClass::SerialPort.into();
         let profile = Profile {
@@ -143,60 +178,80 @@ impl BluetoothWorker {
             info!("RFCOMM stream established.");
             Ok(stream)
         } else {
-            error!("No connection request received");
             Err("No connection request received".into())
         }
     }
 
-    // Send data to stream
+    /// Sends a byte payload to the device via the RFCOMM stream.
     async fn send_data(&self, sender: &Sender<<BluetoothWorker as Worker>::Output>, data: Vec<u8>) {
         if let Some(stream) = self.writer.lock().await.as_mut() {
             if let Err(e) = stream.write_all(&data).await {
-                sender.send(BudsWorkerOutput::Error(e.to_string())).unwrap();
+                let err_msg = format!("Send data failed: {}", e);
+                error!("{}", err_msg);
+                if sender.send(BudsWorkerOutput::Error(err_msg)).is_err() {
+                    warn!("UI receiver dropped, could not send Error message.");
+                }
             }
         } else {
-            sender
-                .send(BudsWorkerOutput::Error("Not connected".to_string()))
-                .unwrap();
+            let err_msg = "Cannot send data: Not connected".to_string();
+            error!("{}", err_msg);
+            if sender.send(BudsWorkerOutput::Error(err_msg)).is_err() {
+                warn!("UI receiver dropped, could not send Error message.");
+            }
         }
     }
 }
 
-async fn read_task(mut stream: OwnedReadHalf, sender: Sender<BudsWorkerOutput>) {
+/// Asynchronous task that continuously reads from the RFCOMM stream.
+///
+/// It runs in a loop, waiting for incoming data, parsing it into `BudsMessage`s,
+/// and sending them to the UI. The loop terminates when the `is_running` flag
+/// is set to false or a fatal error occurs.
+async fn read_task(
+    mut stream: OwnedReadHalf,
+    sender: Sender<BudsWorkerOutput>,
+    is_running: Arc<AtomicBool>,
+) {
     let span = debug_span!("Stream read loop");
     debug!(parent: &span, "Start reading");
-    loop {
-        let mut buffer = [0u8; 2048];
+
+    while is_running.load(Ordering::Relaxed) {
+        let mut buffer = [0u8; READ_BUFFER_SIZE];
 
         match stream.read(&mut buffer).await {
             Ok(0) => {
-                error!(parent: &span, "Stream closed by peer");
-                sender
-                    .send(BudsWorkerOutput::Error("Stream closed by peer".to_string()))
-                    .unwrap();
-                sender.send(BudsWorkerOutput::Disconnected).unwrap();
+                info!(parent: &span, "Stream closed by peer");
                 break;
             }
             Ok(n) => {
                 trace!("Read {} bytes", n);
                 let buff = &buffer[..n];
 
-                match BudsMessage::from_bytes(buff) {
-                    Some(msg) => {
-                        sender.send(BudsWorkerOutput::DataReceived(msg)).unwrap();
+                if let Some(msg) = BudsMessage::from_bytes(buff) {
+                    if sender.send(BudsWorkerOutput::DataReceived(msg)).is_err() {
+                        warn!("UI receiver dropped, could not send DataReceived message.");
+                        break;
                     }
-                    None => continue,
-                };
+                }
             }
             Err(e) => {
-                error!(parent: &span, "Read error {:?}", e);
-                sender
-                    .send(BudsWorkerOutput::Error(format!("Read error: {}", e)))
-                    .unwrap();
-                sender.send(BudsWorkerOutput::Disconnected).unwrap();
+                // Only log error if we were expecting to be running.
+                if is_running.load(Ordering::Relaxed) {
+                    error!(parent: &span, "Read error: {}", e);
+                    let err_msg = format!("Read error: {}", e);
+                    if sender.send(BudsWorkerOutput::Error(err_msg)).is_err() {
+                        warn!("UI receiver dropped, could not send Error message.");
+                    }
+                }
                 break;
             }
         }
     }
+
+    // Ensure we always send a disconnected message on exit.
+    if sender.send(BudsWorkerOutput::Disconnected).is_err() {
+        warn!("UI receiver dropped, could not send final Disconnected message.");
+    }
+    is_running.store(false, Ordering::Relaxed);
     debug!(parent: &span, "Stop reading");
 }
