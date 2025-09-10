@@ -1,9 +1,10 @@
+use gtk4::gio::prelude::SettingsExtManual;
 use gtk4::prelude::GtkWindowExt;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, SimpleComponent,
     prelude::{AsyncComponent, AsyncComponentController, AsyncController},
 };
-use tracing::{debug};
+use tracing::debug;
 
 use crate::{
     app::{
@@ -12,6 +13,7 @@ use crate::{
         page_manage::{PageManageInput, PageManageModel, PageManageOutput},
     },
     model::device_info::DeviceInfo,
+    settings,
 };
 
 #[derive(Debug)]
@@ -60,8 +62,6 @@ impl SimpleComponent for AppModel {
         #[root]
         adw::ApplicationWindow {
             set_title: Some("Galaxy Buds Manager"),
-            set_default_width: 800,
-            set_default_height: 800,
 
             adw::ToolbarView {
                 add_top_bar = &adw::HeaderBar {},
@@ -81,6 +81,19 @@ impl SimpleComponent for AppModel {
         window: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let settings = settings::get_settings();
+
+        // -> Add these two lines to bind the window size
+        settings
+            .bind("window-width", &window, "default-width")
+            .flags(gtk4::gio::SettingsBindFlags::DEFAULT)
+            .build();
+
+        settings
+            .bind("window-height", &window, "default-height")
+            .flags(gtk4::gio::SettingsBindFlags::DEFAULT)
+            .build();
+
         let find_dialog = DialogFind::builder()
             .launch(window.clone())
             .forward(sender.input_sender(), AppInput::FromDialogFind);
