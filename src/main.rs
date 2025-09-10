@@ -1,22 +1,26 @@
-mod bluetooth;
-mod ui;
+mod app;
+mod buds_worker;
+mod model;
 
-use adw::prelude::*;
-use gtk4::Application;
+use crate::app::main::{AppInit, AppModel};
+use relm4::RelmApp;
+use tracing::level_filters::LevelFilter;
+use tracing_subscriber::EnvFilter;
 
 const APP_ID: &str = "com.github.rodrigost23.galaxy-buds-gui-rs";
 
 fn main() {
-    // Initialize Libadwaita and create the GTK Application.
-    adw::init().expect("Failed to initialize Libadwaita.");
-    let app = Application::builder().application_id(APP_ID).build();
+    let filter = EnvFilter::builder()
+        .with_default_directive(LevelFilter::INFO.into())
+        .from_env()
+        .unwrap()
+        .add_directive("relm4=error".parse().unwrap());
 
-    // Connect the "activate" signal to the build_ui function.
-    app.connect_activate(|app| {
-        let window = ui::build_window(app);
-        window.present();
-    });
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .compact()
+        .init();
 
-    // Run the application.
-    app.run();
+    let app = RelmApp::new(APP_ID);
+    app.run::<AppModel>(AppInit {});
 }

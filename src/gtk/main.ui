@@ -5,250 +5,238 @@
   <requires lib="gio" version="2.0"/>
   <requires lib="gtk" version="4.4"/>
   <requires lib="libadwaita" version="1.4"/>
-  <object class="AdwWindow" id="main_window">
-    <property name="default-height">800</property>
-    <property name="default-width">800</property>
-    <property name="height-request">200</property>
-    <property name="width-request">280</property>
-    <child>
-      <object class="AdwBreakpoint">
-        <!-- Custom object fragments -->
-        <condition>max-width: 540sp</condition>
-        <setter object="split_view" property="collapsed">True</setter>
-      </object>
-    </child>
-    <child>
-      <object class="AdwNavigationSplitView" id="split_view">
-        <property name="content">
-          <object class="AdwNavigationPage" id="content_page">
-            <property name="title"/>
+  <object class="AdwNavigationSplitView" id="split_view">
+    <property name="content">
+      <object class="AdwNavigationPage" id="content_page">
+        <property name="title"/>
+        <child>
+          <object class="AdwToolbarView">
+            <child type="top">
+              <object class="AdwHeaderBar" id="content_header_bar">
+                <property name="show-end-title-buttons">True</property>
+                <property name="show-start-title-buttons">True</property>
+              </object>
+            </child>
+            <child type="top">
+              <object class="AdwBanner" id="banner"/>
+            </child>
             <child>
-              <object class="AdwToolbarView">
-                <child type="top">
-                  <object class="AdwHeaderBar" id="content_header_bar">
-                    <property name="show-end-title-buttons">True</property>
-                    <property name="show-start-title-buttons">True</property>
+              <object class="AdwViewStack" id="view_stack">
+                <child>
+                  <object class="AdwViewStackPage" id="home">
+                    <property name="child">
+                      <object class="AdwStatusPage">
+                        <property name="title">Home</property>
+                      </object>
+                    </property>
+                    <property name="name">home</property>
+                    <property name="title">Home</property>
                   </object>
                 </child>
                 <child>
-                  <object class="AdwViewStack" id="view_stack">
-                    <child>
-                      <object class="AdwViewStackPage" id="home">
-                        <property name="child">
-                          <object class="AdwStatusPage">
-                            <property name="title">Home</property>
-                          </object>
-                        </property>
-                        <property name="name">home</property>
-                        <property name="title">Home</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwViewStackPage" id="page_noise">
-                        <property name="child">
-                          <object class="AdwStatusPage">
-                            <property name="title">Noise Control</property>
-                          </object>
-                        </property>
-                        <property name="name">page-noise</property>
+                  <object class="AdwViewStackPage" id="page_noise">
+                    <property name="child">
+                      <object class="AdwStatusPage">
                         <property name="title">Noise Control</property>
                       </object>
-                    </child>
-                    <child>
-                      <object class="AdwViewStackPage" id="page_touch">
-                        <property name="child">
-                          <object class="AdwStatusPage">
-                            <property name="title">Touch</property>
-                          </object>
-                        </property>
-                        <property name="name">page-touch</property>
+                    </property>
+                    <property name="name">page-noise</property>
+                    <property name="title">Noise Control</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwViewStackPage" id="page_touch">
+                    <property name="child">
+                      <object class="AdwStatusPage">
                         <property name="title">Touch</property>
                       </object>
-                    </child>
-                    <child>
-                      <object class="AdwViewStackPage" id="page_equalizer">
-                        <property name="child">
-                          <object class="AdwStatusPage">
-                            <property name="title">Equalizer</property>
-                          </object>
-                        </property>
-                        <property name="name">page-equalizer</property>
+                    </property>
+                    <property name="name">page-touch</property>
+                    <property name="title">Touch</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwViewStackPage" id="page_equalizer">
+                    <property name="child">
+                      <object class="AdwStatusPage">
                         <property name="title">Equalizer</property>
                       </object>
-                    </child>
-                    <child>
-                      <object class="AdwViewStackPage" id="page_find">
-                        <property name="child">
-                          <object class="AdwStatusPage">
-                            <property name="title">Find</property>
-                          </object>
-                        </property>
-                        <property name="name">page-find</property>
+                    </property>
+                    <property name="name">page-equalizer</property>
+                    <property name="title">Equalizer</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwViewStackPage" id="page_find">
+                    <property name="child">
+                      <object class="AdwStatusPage">
                         <property name="title">Find</property>
                       </object>
-                    </child>
+                    </property>
+                    <property name="name">page-find</property>
+                    <property name="title">Find</property>
                   </object>
                 </child>
               </object>
             </child>
           </object>
-        </property>
-        <property name="max-sidebar-width">400</property>
-        <property name="min-sidebar-width">280</property>
-        <property name="show-content">True</property>
-        <property name="sidebar">
-          <object class="AdwNavigationPage">
-            <property name="title">Galaxy Buds Manager</property>
-            <child>
-              <object class="AdwToolbarView">
-                <child type="top">
-                  <object class="AdwHeaderBar">
-                    <property name="show-end-title-buttons">True</property>
-                    <property name="show-start-title-buttons">True</property>
-                    <child type="end">
-                      <object class="GtkMenuButton">
-                        <property name="icon-name">open-menu-symbolic</property>
-                        <property name="primary">True</property>
-                      </object>
-                    </child>
+        </child>
+      </object>
+    </property>
+    <property name="max-sidebar-width">400</property>
+    <property name="min-sidebar-width">280</property>
+    <property name="show-content">True</property>
+    <property name="sidebar">
+      <object class="AdwNavigationPage">
+        <property name="title">Galaxy Buds Manager</property>
+        <child>
+          <object class="AdwToolbarView">
+            <child type="top">
+              <object class="AdwHeaderBar">
+                <property name="show-end-title-buttons">True</property>
+                <property name="show-start-title-buttons">True</property>
+                <child type="end">
+                  <object class="GtkMenuButton">
+                    <property name="icon-name">open-menu-symbolic</property>
+                    <property name="primary">True</property>
                   </object>
                 </child>
+              </object>
+            </child>
+            <child>
+              <object class="GtkListBox" id="sidebar_list">
+                <property name="css-classes">navigation-sidebar</property>
                 <child>
-                  <object class="GtkListBox" id="sidebar_list">
-                    <property name="css-classes">navigation-sidebar</property>
-                    <child>
-                      <object class="AdwActionRow" id="row_home">
-                        <property name="action-name">navigation.pop</property>
-                        <property name="child">
+                  <object class="AdwActionRow" id="row_home">
+                    <property name="action-name">navigation.pop</property>
+                    <property name="child">
+                      <object class="GtkBox">
+                        <property name="margin-bottom">8</property>
+                        <property name="margin-end">4</property>
+                        <property name="margin-start">4</property>
+                        <property name="margin-top">8</property>
+                        <property name="orientation">vertical</property>
+                        <property name="spacing">8</property>
+                        <child>
+                          <object class="GtkImage">
+                            <property name="icon-name">image-missing</property>
+                            <property name="icon-size">large</property>
+                            <property name="pixel-size">80</property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkLabel" id="device_name">
+                            <property name="label">Not connected</property>
+                            <style>
+                              <class name="heading"/>
+                            </style>
+                          </object>
+                        </child>
+                        <child>
                           <object class="GtkBox">
-                            <property name="margin-bottom">8</property>
-                            <property name="margin-end">4</property>
-                            <property name="margin-start">4</property>
-                            <property name="margin-top">8</property>
-                            <property name="orientation">vertical</property>
+                            <property name="halign">center</property>
                             <property name="spacing">8</property>
                             <child>
-                              <object class="GtkImage">
-                                <property name="icon-name">image-missing</property>
-                                <property name="icon-size">large</property>
-                                <property name="pixel-size">80</property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="GtkLabel">
-                                <property name="label">Device Name</property>
-                                <style>
-                                  <class name="heading"/>
-                                </style>
+                              <object class="GtkBox">
+                                <property name="spacing">4</property>
+                                <child>
+                                  <object class="GtkImage">
+                                    <property name="icon-name">audio-headphones-symbolic</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkLabel" id="buds_battery">
+                                    <property name="label">L / R 100%</property>
+                                  </object>
+                                </child>
                               </object>
                             </child>
                             <child>
                               <object class="GtkBox">
-                                <property name="halign">center</property>
-                                <property name="spacing">8</property>
+                                <property name="spacing">4</property>
                                 <child>
-                                  <object class="GtkBox">
-                                    <property name="spacing">4</property>
-                                    <child>
-                                      <object class="GtkImage">
-                                        <property name="icon-name">audio-headphones-symbolic</property>
-                                      </object>
-                                    </child>
-                                    <child>
-                                      <object class="GtkLabel">
-                                        <property name="label">L / R 100%</property>
-                                      </object>
-                                    </child>
+                                  <object class="GtkImage">
+                                    <property name="icon-name">printer-symbolic</property>
+                                    <property name="tooltip-text">Case</property>
                                   </object>
                                 </child>
                                 <child>
-                                  <object class="GtkBox">
-                                    <property name="spacing">4</property>
-                                    <child>
-                                      <object class="GtkImage">
-                                        <property name="icon-name">printer-symbolic</property>
-                                        <property name="tooltip-text">Case</property>
-                                      </object>
-                                    </child>
-                                    <child>
-                                      <object class="GtkLabel">
-                                        <property name="label">100%</property>
-                                      </object>
-                                    </child>
+                                  <object class="GtkLabel" id="case_battery">
+                                    <property name="label">100%</property>
                                   </object>
                                 </child>
-                                <style>
-                                  <class name="caption"/>
-                                </style>
                               </object>
                             </child>
-                          </object>
-                        </property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="GtkListBoxRow">
-                        <property name="accessible-role">separator</property>
-                        <property name="activatable">False</property>
-                        <property name="can-focus">False</property>
-                        <property name="can-target">False</property>
-                        <property name="child">
-                          <object class="GtkSeparator"/>
-                        </property>
-                        <property name="css-name">separator</property>
-                        <property name="focus-on-click">False</property>
-                        <property name="focusable">False</property>
-                        <property name="selectable">False</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwActionRow" id="row_noise">
-                        <property name="accessible-role">navigation</property>
-                        <property name="action-name">navigation.push</property>
-                        <property name="action-target">'page-option-1'</property>
-                        <property name="name">row_noise</property>
-                        <property name="title">Noise Control</property>
-                        <child type="prefix">
-                          <object class="GtkImage">
-                            <property name="icon-name">audio-volume-medium-symbolic</property>
+                            <style>
+                              <class name="caption"/>
+                            </style>
                           </object>
                         </child>
                       </object>
-                    </child>
-                    <child>
-                      <object class="AdwActionRow" id="row_touch">
-                        <property name="accessible-role">navigation</property>
-                        <property name="name">row_touch</property>
-                        <property name="title">Touchpad</property>
-                        <child type="prefix">
-                          <object class="GtkImage">
-                            <property name="icon-name">input-touchpad-symbolic</property>
-                          </object>
-                        </child>
+                    </property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkListBoxRow">
+                    <property name="accessible-role">separator</property>
+                    <property name="activatable">False</property>
+                    <property name="can-focus">False</property>
+                    <property name="can-target">False</property>
+                    <property name="child">
+                      <object class="GtkSeparator"/>
+                    </property>
+                    <property name="css-name">separator</property>
+                    <property name="focus-on-click">False</property>
+                    <property name="focusable">False</property>
+                    <property name="selectable">False</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow" id="row_noise">
+                    <property name="accessible-role">navigation</property>
+                    <property name="action-name">navigation.push</property>
+                    <property name="action-target">'page-option-1'</property>
+                    <property name="name">row_noise</property>
+                    <property name="title">Noise Control</property>
+                    <child type="prefix">
+                      <object class="GtkImage">
+                        <property name="icon-name">audio-volume-medium-symbolic</property>
                       </object>
                     </child>
-                    <child>
-                      <object class="AdwActionRow" id="row_equalizer">
-                        <property name="accessible-role">navigation</property>
-                        <property name="name">row_equalizer</property>
-                        <property name="title">Equalizer</property>
-                        <child type="prefix">
-                          <object class="GtkImage">
-                            <property name="icon-name">audio-card-symbolic</property>
-                          </object>
-                        </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow" id="row_touch">
+                    <property name="accessible-role">navigation</property>
+                    <property name="name">row_touch</property>
+                    <property name="title">Touchpad</property>
+                    <child type="prefix">
+                      <object class="GtkImage">
+                        <property name="icon-name">input-touchpad-symbolic</property>
                       </object>
                     </child>
-                    <child>
-                      <object class="AdwActionRow" id="row_find">
-                        <property name="accessible-role">navigation</property>
-                        <property name="name">row_find</property>
-                        <property name="title">Find my earbuds</property>
-                        <child type="prefix">
-                          <object class="GtkImage">
-                            <property name="icon-name">audio-volume-medium-symbolic</property>
-                          </object>
-                        </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow" id="row_equalizer">
+                    <property name="accessible-role">navigation</property>
+                    <property name="name">row_equalizer</property>
+                    <property name="title">Equalizer</property>
+                    <child type="prefix">
+                      <object class="GtkImage">
+                        <property name="icon-name">audio-card-symbolic</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow" id="row_find">
+                    <property name="accessible-role">navigation</property>
+                    <property name="name">row_find</property>
+                    <property name="title">Find my earbuds</property>
+                    <child type="prefix">
+                      <object class="GtkImage">
+                        <property name="icon-name">audio-volume-medium-symbolic</property>
                       </object>
                     </child>
                   </object>
@@ -256,9 +244,9 @@
               </object>
             </child>
           </object>
-        </property>
-        <property name="sidebar-width-fraction">0.3</property>
+        </child>
       </object>
-    </child>
+    </property>
+    <property name="sidebar-width-fraction">0.3</property>
   </object>
 </interface>
