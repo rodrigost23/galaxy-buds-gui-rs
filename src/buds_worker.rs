@@ -12,16 +12,14 @@ use std::sync::Arc;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     runtime::Runtime,
-    sync::{Mutex, MutexGuard},
+    sync::Mutex,
 };
-use tracing::{debug, debug_span, error, info};
+use tracing::{debug, debug_span, error, info, trace};
 
 use crate::model::{
     buds_message::{BudsCommand, BudsMessage},
     device_info::DeviceInfo,
 };
-
-// --- Worker I/O ---
 
 #[derive(Debug)]
 pub enum BudsWorkerInput {
@@ -40,20 +38,6 @@ pub enum BudsWorkerOutput {
     Disconnected,
     DataReceived(BudsMessage),
     Error(String),
-}
-
-// --- Worker Implementation ---
-
-#[derive(Clone, Debug)]
-struct WorkerState {
-    // The RFCOMM stream is wrapped in several layers for safe concurrent access:
-    // - `Option`: The stream only exists when we are connected.
-    // - `Mutex`: An async-aware lock that ensures only one task can access the
-    //   `Option<Stream>` at a time. This prevents data races.
-    // - `Arc`: An "Atomically Reference Counted" smart pointer. It allows multiple
-    //   owners of the same data (the Mutex), making it possible to share the
-    //   stream between the reader task and the `update` function.
-    writer: Arc<Mutex<Option<OwnedWriteHalf>>>,
 }
 
 #[derive(Debug)]
@@ -96,41 +80,40 @@ impl BluetoothWorker {
     async fn handle_input(&self, msg: BudsWorkerInput, sender: &Sender<<Self as Worker>::Output>) {
         let span = debug_span!("BudsCommand", msg=?msg);
         debug!(parent: &span, "start handle");
-        let writer = self.writer.clone();
-        let mut writer_guard = writer.lock().await;
 
         match msg {
-            BudsWorkerInput::Connect => match self.connect_and_get_stream().await {
-                Ok(stream) => {
-                    // Split reader and writer streams
-                    let (reader, writer) = stream.into_split();
-                    *writer_guard = Some(writer);
-
-                    // Run reader loop in background
-                    relm4::spawn(read_task(reader, sender.clone()));
-
-                    self.send_data(&sender, writer_guard, BudsCommand::ManagerInfo.to_bytes())
-                        .await;
-
-                    sender.send(BudsWorkerOutput::Connected).unwrap();
-                }
-                Err(e) => {
-                    sender.send(BudsWorkerOutput::Error(e.to_string())).unwrap();
-                }
-            },
+            BudsWorkerInput::Connect => self.connect(sender).await,
             BudsWorkerInput::Disconnect => {
-                *writer_guard = None; // Dropping the stream closes the connection.
+                *self.writer.lock().await = None; // Dropping the stream closes the connection.
                 sender.send(BudsWorkerOutput::Disconnected).unwrap();
             }
-            BudsWorkerInput::SendData(data) => {
-                self.send_data(&sender, writer_guard, data).await;
-            }
-            BudsWorkerInput::SendCommand(cmd) => {
-                self.send_data(&sender, writer_guard, cmd.to_bytes()).await;
-            }
+            BudsWorkerInput::SendData(data) => self.send_data(&sender, data).await,
+            BudsWorkerInput::SendCommand(cmd) => self.send_data(&sender, cmd.to_bytes()).await,
         }
         debug!(parent: &span, "end handle");
     }
+
+    async fn connect(&self, sender: &Sender<BudsWorkerOutput>) {
+        match self.connect_and_get_stream().await {
+            Ok(stream) => {
+                // Split reader and writer streams
+                let (reader, writer) = stream.into_split();
+                *self.writer.lock().await = Some(writer);
+
+                // Run reader loop in background
+                relm4::spawn(read_task(reader, sender.clone()));
+
+                self.send_data(&sender, BudsCommand::ManagerInfo.to_bytes())
+                    .await;
+
+                sender.send(BudsWorkerOutput::Connected).unwrap();
+            }
+            Err(e) => {
+                sender.send(BudsWorkerOutput::Error(e.to_string())).unwrap();
+            }
+        }
+    }
+
     /// Performs the full bluetooth connection and profile registration dance.
     async fn connect_and_get_stream(
         &self,
@@ -166,13 +149,8 @@ impl BluetoothWorker {
     }
 
     // Send data to stream
-    async fn send_data(
-        &self,
-        sender: &Sender<<BluetoothWorker as Worker>::Output>,
-        mut writer_guard: MutexGuard<'_, Option<OwnedWriteHalf>>,
-        data: Vec<u8>,
-    ) {
-        if let Some(stream) = writer_guard.as_mut() {
+    async fn send_data(&self, sender: &Sender<<BluetoothWorker as Worker>::Output>, data: Vec<u8>) {
+        if let Some(stream) = self.writer.lock().await.as_mut() {
             if let Err(e) = stream.write_all(&data).await {
                 sender.send(BudsWorkerOutput::Error(e.to_string())).unwrap();
             }
@@ -200,6 +178,7 @@ async fn read_task(mut stream: OwnedReadHalf, sender: Sender<BudsWorkerOutput>) 
                 break;
             }
             Ok(n) => {
+                trace!("Read {} bytes", n);
                 let buff = &buffer[..n];
 
                 match BudsMessage::from_bytes(buff) {
