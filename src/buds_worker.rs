@@ -60,7 +60,7 @@ struct WorkerState {
 #[derive(Debug)]
 pub struct BluetoothWorker {
     device: DeviceInfo,
-    state: WorkerState,
+    writer: Arc<Mutex<Option<OwnedWriteHalf>>>,
     runtime: Arc<Runtime>,
 }
 
@@ -77,29 +77,27 @@ impl Worker for BluetoothWorker {
                 .expect("Failed to create Tokio runtime"),
         );
 
-        let state = WorkerState {
-            writer: Arc::new(Mutex::new(None)),
-        };
+        let writer = Arc::new(Mutex::new(None));
 
         Self {
             device,
-            state,
+            writer,
             runtime,
         }
     }
 
     /// Handles discrete events from the UI. Each message is processed in a short-lived async task.
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
-        self.runtime.block_on(self.handle_input(msg, sender));
+        self.runtime.block_on(self.handle_input(msg, &sender));
     }
 }
 
 impl BluetoothWorker {
-    async fn handle_input(&self, msg: BudsWorkerInput, sender: ComponentSender<Self>) {
+    async fn handle_input(&self, msg: BudsWorkerInput, sender: &ComponentSender<Self>) {
         let span = debug_span!("BudsCommand", msg=?msg);
         debug!(parent: &span, "start handle");
-        let state = self.state.clone();
-        let mut writer_guard = state.writer.lock().await;
+        let writer = self.writer.clone();
+        let mut writer_guard = writer.lock().await;
 
         match msg {
             BudsWorkerInput::Connect => match self.connect_and_get_stream().await {
@@ -111,7 +109,8 @@ impl BluetoothWorker {
                     // Run reader loop in background
                     relm4::spawn(read_task(reader, sender.output_sender().clone()));
 
-                    self.send_data(&sender, writer_guard, BudsCommand::ManagerInfo.to_bytes()).await;
+                    self.send_data(&sender, writer_guard, BudsCommand::ManagerInfo.to_bytes())
+                        .await;
 
                     sender.output(BudsWorkerOutput::Connected).unwrap();
                 }
