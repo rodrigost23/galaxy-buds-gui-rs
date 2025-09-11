@@ -10,7 +10,7 @@ use tracing::debug;
 use crate::{
     app::{
         dialog_find::{DialogFind, DialogFindInput, DialogFindOutput},
-        page_connection::{PageConnectionModel, PageConnectionOutput},
+        page_connection::{PageConnectionInput, PageConnectionModel, PageConnectionOutput},
         page_manage::{PageManageInput, PageManageModel, PageManageOutput},
     },
     consts::DEVICE_ADDRESS_KEY,
@@ -22,7 +22,6 @@ use crate::{
 pub enum Page {
     Connection(AsyncController<PageConnectionModel>),
     Manage(Controller<PageManageModel>),
-    Init(adw::NavigationPage),
 }
 
 impl Page {
@@ -30,16 +29,16 @@ impl Page {
         match self {
             Page::Connection(controller) => controller.widget(),
             Page::Manage(controller) => controller.widget(),
-            Page::Init(page) => page,
         }
     }
 }
 
 #[derive(Debug)]
 pub struct AppModel {
-    active_page: Page,
+    active_page: Option<Page>,
     find_dialog: Controller<DialogFind>,
     settings: adw::gio::Settings,
+    connect_page: AsyncController<PageConnectionModel>,
 }
 
 #[derive(Debug)]
@@ -66,9 +65,9 @@ impl SimpleComponent for AppModel {
         adw::ApplicationWindow {
             set_title: Some("Galaxy Buds Manager"),
 
+            #[name = "nav_view"]
             adw::NavigationView {
-                #[watch]
-                replace: &[model.active_page.widget().to_owned()],
+                add: &connect_page_widget,
             },
         }
     }
@@ -95,8 +94,18 @@ impl SimpleComponent for AppModel {
             .launch(window.clone())
             .forward(sender.input_sender(), AppInput::FromDialogFind);
 
+        let connect_page = PageConnectionModel::builder().launch(()).forward(
+            sender.input_sender(),
+            |msg| match msg {
+                PageConnectionOutput::SelectDevice(device) => AppInput::SelectDevice(device),
+            },
+        );
+
+        let connect_page_widget = connect_page.widget().clone();
+
         let model = AppModel {
-            active_page: Page::Init(adw::NavigationPage::default()),
+            active_page: None,
+            connect_page,
             find_dialog,
             settings,
         };
@@ -115,18 +124,10 @@ impl SimpleComponent for AppModel {
                 let page = PageManageModel::builder()
                     .launch(device)
                     .forward(sender.input_sender(), AppInput::FromPageManage);
-                self.active_page = Page::Manage(page);
+                self.active_page = Some(Page::Manage(page));
             }
             AppInput::Disconnect => {
-                let page = PageConnectionModel::builder().launch(()).forward(
-                    sender.input_sender(),
-                    |msg| match msg {
-                        PageConnectionOutput::SelectDevice(device) => {
-                            AppInput::SelectDevice(device)
-                        }
-                    },
-                );
-                self.active_page = Page::Connection(page);
+                self.active_page = None;
             }
             AppInput::FromPageManage(msg) => match msg {
                 PageManageOutput::OpenFindDialog => self.find_dialog.emit(DialogFindInput::Show),
@@ -136,9 +137,24 @@ impl SimpleComponent for AppModel {
                 }
             },
             AppInput::FromDialogFind(msg) => {
-                if let Page::Manage(page) = &self.active_page {
+                if let Some(Page::Manage(page)) = &self.active_page {
                     page.emit(PageManageInput::FindDialogCommand(msg));
                 }
+            }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, sender: ComponentSender<Self>) {
+        match &self.active_page {
+            Some(page) => {
+                widgets.nav_view.push(page.widget());
+            }
+            None => {
+                widgets.nav_view.pop_to_page(self.connect_page.widget());
+                self.connect_page
+                    .sender()
+                    .send(PageConnectionInput::LoadDevices)
+                    .unwrap()
             }
         }
     }

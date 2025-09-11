@@ -164,7 +164,8 @@ impl SimpleAsyncComponent for PageConnectionModel {
 
             PageConnectionInput::SelectDevice(device) => {
                 debug!("Selected device");
-                self.settings
+                let _ = self
+                    .settings
                     .set_string(DEVICE_ADDRESS_KEY, &device.address);
                 let _ = sender.output(PageConnectionOutput::SelectDevice(device));
             }

@@ -81,8 +81,6 @@ pub struct PageManageModel {
 pub enum PageManageInput {
     Connect,
     Disconnect,
-    SelectRow(String),
-    ShowContent(bool),
     BluetoothEvent(BudsWorkerOutput),
     BluetoothCommand(BudsCommand),
     OpenFindDialog,
@@ -108,13 +106,7 @@ impl SimpleComponent for PageManageModel {
 
             #[wrap(Some)]
             set_child = &adw::ToolbarView {
-                add_top_bar = &adw::HeaderBar {
-                    pack_end = &gtk4::Button {
-                        set_icon_name: "bluetooth-disconnected-symbolic",
-                        set_tooltip_text: Some("Change device"),
-                        connect_clicked => PageManageInput::Disconnect,
-                    },
-                },
+                add_top_bar = &adw::HeaderBar {},
                 add_top_bar = &adw::Banner {},
 
                 #[wrap(Some)]
@@ -255,21 +247,6 @@ impl SimpleComponent for PageManageModel {
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>) {
         match message {
-            PageManageInput::SelectRow(row_name) => {
-                self.active_page = match row_name.as_str() {
-                    "row_noise" => "page-noise",
-                    "row_touch" => "page-touch",
-                    "row_equalizer" => "page-equalizer",
-                    "row_find" => "page-find",
-                    _ => "home",
-                }
-                .to_string();
-            }
-            PageManageInput::ShowContent(show) => {
-                if !show {
-                    self.active_page = "home".into();
-                }
-            }
             PageManageInput::BluetoothEvent(output) => match output {
                 BudsWorkerOutput::DataReceived(data) => match data {
                     BudsMessage::StatusUpdate(status) => {
