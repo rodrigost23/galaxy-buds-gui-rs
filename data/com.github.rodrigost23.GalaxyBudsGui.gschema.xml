@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="com.github.rodrigost23.GalaxyBudsGui" path="/com/github/rodrigost23/GalaxyBudsGui/">
+    <key name="window-width" type="i">
+      <default>480</default>
+      <summary>Window Width</summary>
+      <description>The width of the main window.</description>
+    </key>
+    <key name="window-height" type="i">
+      <default>640</default>
+      <summary>Window Height</summary>
+      <description>The height of the main window.</description>
+    </key>
+    <key name="device-address" type="s">
+      <default>''</default>
+    </key>
+  </schema>
+</schemalist>

@@ -1,13 +1,13 @@
 mod app;
 mod buds_worker;
+mod consts;
 mod model;
+mod settings;
 
 use crate::app::main::{AppInit, AppModel};
 use relm4::RelmApp;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::EnvFilter;
-
-const APP_ID: &str = "com.github.rodrigost23.galaxy-buds-gui-rs";
 
 fn main() {
     let filter = EnvFilter::builder()
@@ -21,6 +21,6 @@ fn main() {
         .compact()
         .init();
 
-    let app = RelmApp::new(APP_ID);
+    let app = RelmApp::new(consts::APP_ID);
     app.run::<AppModel>(AppInit {});
 }

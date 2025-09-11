@@ -92,6 +92,7 @@ pub enum PageManageInput {
 #[derive(Debug)]
 pub enum PageManageOutput {
     OpenFindDialog,
+    Disconnect,
 }
 
 #[relm4::component(pub)]
@@ -106,115 +107,127 @@ impl SimpleComponent for PageManageModel {
             set_title: model.device.name.as_str(),
 
             #[wrap(Some)]
-            set_child = &adw::Clamp {
-                gtk4::Box {
-                    set_orientation: gtk4::Orientation::Vertical,
-                    set_margin_horizontal: 4,
-                    set_margin_vertical: 8,
-                    set_spacing: 16,
+            set_child = &adw::ToolbarView {
+                add_top_bar = &adw::HeaderBar {
+                    pack_end = &gtk4::Button {
+                        set_icon_name: "bluetooth-disconnected-symbolic",
+                        set_tooltip_text: Some("Change device"),
+                        connect_clicked => PageManageInput::Disconnect,
+                    },
+                },
+                add_top_bar = &adw::Banner {},
 
+                #[wrap(Some)]
+                set_content = &adw::Clamp {
                     gtk4::Box {
                         set_orientation: gtk4::Orientation::Vertical,
                         set_margin_horizontal: 4,
                         set_margin_vertical: 8,
                         set_spacing: 16,
 
-                        gtk4::Image {
-                            set_icon_name: Some("image-missing"),
-                            set_icon_size: gtk4::IconSize::Large,
-                            set_pixel_size: 128,
-                        },
+                        gtk4::Box {
+                            set_orientation: gtk4::Orientation::Vertical,
+                            set_margin_horizontal: 4,
+                            set_margin_vertical: 8,
+                            set_spacing: 16,
 
-                        gtk4::Label {
-                            #[watch]
-                            set_label: model.device.name.as_str(),
-                            add_css_class: "title-1",
-                        },
+                            gtk4::Image {
+                                set_icon_name: Some("image-missing"),
+                                set_icon_size: gtk4::IconSize::Large,
+                                set_pixel_size: 128,
+                            },
 
-                        #[transition = "SlideUp"]
-                        match model.connection_state {
-                            ConnectionState::Connected => gtk4::Box {
-                                set_orientation: gtk4::Orientation::Horizontal,
-                                set_halign: gtk4::Align::Center,
-                                set_spacing: 8,
+                            gtk4::Label {
+                                #[watch]
+                                set_label: model.device.name.as_str(),
+                                add_css_class: "title-1",
+                            },
 
-                                gtk4::Box {
-                                    set_spacing: 4,
+                            #[transition = "SlideUp"]
+                            match model.connection_state {
+                                ConnectionState::Connected => gtk4::Box {
+                                    set_orientation: gtk4::Orientation::Horizontal,
+                                    set_halign: gtk4::Align::Center,
+                                    set_spacing: 8,
 
-                                    gtk4::Image {
-                                        set_icon_name: Some("audio-headphones-symbolic"),
+                                    gtk4::Box {
+                                        set_spacing: 4,
+
+                                        gtk4::Image {
+                                            set_icon_name: Some("audio-headphones-symbolic"),
+                                        },
+
+                                        gtk4::Label {
+                                            #[watch]
+                                            set_label: model.buds_status.battery_text().as_str(),
+                                            add_css_class: "heading",
+                                        },
                                     },
 
-                                    gtk4::Label {
-                                        #[watch]
-                                        set_label: model.buds_status.battery_text().as_str(),
-                                        add_css_class: "heading",
+                                    gtk4::Box {
+                                        set_spacing: 4,
+
+                                        gtk4::Image {
+                                            set_icon_name: Some("printer-symbolic"),
+                                        },
+
+                                        gtk4::Label {
+                                            #[watch]
+                                            set_label: model.buds_status.case_battery_text().as_str(),
+                                            add_css_class: "heading",
+                                        },
                                     },
                                 },
+                                ConnectionState::Connecting => gtk4::Label {
+                                    set_label: "Connecting..."
+                                },
+                                ConnectionState::Disconnected | ConnectionState::Error(_) => gtk4::Box {
+                                    set_orientation: gtk4::Orientation::Horizontal,
+                                    set_halign: gtk4::Align::Center,
+                                    set_spacing: 8,
 
-                                gtk4::Box {
-                                    set_spacing: 4,
-
-                                    gtk4::Image {
-                                        set_icon_name: Some("printer-symbolic"),
-                                    },
-
-                                    gtk4::Label {
-                                        #[watch]
-                                        set_label: model.buds_status.case_battery_text().as_str(),
-                                        add_css_class: "heading",
-                                    },
+                                    gtk4::Label { set_label: "Disconnected" },
+                                    gtk4::Button {
+                                        set_label: "Connect",
+                                        connect_clicked => PageManageInput::Connect,
+                                    }
                                 },
                             },
-                            ConnectionState::Connecting => gtk4::Label {
-                                set_label: "Connecting..."
+                        },
+
+                        adw::PreferencesGroup {
+                            adw::ActionRow {
+                                set_title: "Noise control",
+                                #[watch]
+                                set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
+                                set_activatable: true,
+
                             },
-                            ConnectionState::Disconnected | ConnectionState::Error(_) => gtk4::Box {
-                                set_orientation: gtk4::Orientation::Horizontal,
-                                set_halign: gtk4::Align::Center,
-                                set_spacing: 8,
+                            adw::ActionRow {
+                                set_title: "Touch options",
+                                #[watch]
+                                set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
+                                set_activatable: true,
 
-                                gtk4::Label { set_label: "Disconnected" },
-                                gtk4::Button {
-                                    set_label: "Connect",
-                                    connect_clicked => PageManageInput::Connect,
-                                }
                             },
-                        },
-                    },
+                            adw::ActionRow {
+                                set_title: "Equalizer",
+                                #[watch]
+                                set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
+                                set_activatable: true,
 
-                    adw::PreferencesGroup {
-                        adw::ActionRow {
-                            set_title: "Noise control",
-                            #[watch]
-                            set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
-                            set_activatable: true,
-
-                        },
-                        adw::ActionRow {
-                            set_title: "Touch options",
-                            #[watch]
-                            set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
-                            set_activatable: true,
-
-                        },
-                        adw::ActionRow {
-                            set_title: "Equalizer",
-                            #[watch]
-                            set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
-                            set_activatable: true,
-
-                        },
-                        adw::ActionRow {
-                            set_title: "Find my Buds",
-                            #[watch]
-                            set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
-                            set_activatable: true,
-                            connect_activated => PageManageInput::OpenFindDialog,
-                        },
+                            },
+                            adw::ActionRow {
+                                set_title: "Find my Buds",
+                                #[watch]
+                                set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
+                                set_activatable: true,
+                                connect_activated => PageManageInput::OpenFindDialog,
+                            },
+                        }
                     }
                 }
-            }
+            },
         }
     }
 
@@ -296,7 +309,13 @@ impl SimpleComponent for PageManageModel {
                         .unwrap();
                 }
             }
-            PageManageInput::Disconnect => todo!(),
+            PageManageInput::Disconnect => {
+                self.bt_worker
+                    .sender()
+                    .send(BudsWorkerInput::Disconnect)
+                    .unwrap();
+                sender.output(PageManageOutput::Disconnect).unwrap();
+            }
             PageManageInput::BluetoothCommand(command) => {
                 self.bt_worker
                     .sender()

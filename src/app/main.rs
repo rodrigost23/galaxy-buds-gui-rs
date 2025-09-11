@@ -1,9 +1,11 @@
+use adw::gio::prelude::SettingsExt;
+use gtk4::gio::prelude::SettingsExtManual;
 use gtk4::prelude::GtkWindowExt;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, SimpleComponent,
     prelude::{AsyncComponent, AsyncComponentController, AsyncController},
 };
-use tracing::{debug};
+use tracing::debug;
 
 use crate::{
     app::{
@@ -11,7 +13,9 @@ use crate::{
         page_connection::{PageConnectionModel, PageConnectionOutput},
         page_manage::{PageManageInput, PageManageModel, PageManageOutput},
     },
+    consts::DEVICE_ADDRESS_KEY,
     model::device_info::DeviceInfo,
+    settings,
 };
 
 #[derive(Debug)]
@@ -35,6 +39,7 @@ impl Page {
 pub struct AppModel {
     active_page: Page,
     find_dialog: Controller<DialogFind>,
+    settings: adw::gio::Settings,
 }
 
 #[derive(Debug)]
@@ -60,18 +65,10 @@ impl SimpleComponent for AppModel {
         #[root]
         adw::ApplicationWindow {
             set_title: Some("Galaxy Buds Manager"),
-            set_default_width: 800,
-            set_default_height: 800,
 
-            adw::ToolbarView {
-                add_top_bar = &adw::HeaderBar {},
-                add_top_bar = &adw::Banner {},
-
-                #[wrap(Some)]
-                set_content = &adw::NavigationView {
-                    #[watch]
-                    replace: &[model.active_page.widget().to_owned()],
-                }
+            adw::NavigationView {
+                #[watch]
+                replace: &[model.active_page.widget().to_owned()],
             },
         }
     }
@@ -81,6 +78,19 @@ impl SimpleComponent for AppModel {
         window: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let settings = settings::get_settings();
+
+        // -> Add these two lines to bind the window size
+        settings
+            .bind("window-width", &window, "default-width")
+            .flags(gtk4::gio::SettingsBindFlags::DEFAULT)
+            .build();
+
+        settings
+            .bind("window-height", &window, "default-height")
+            .flags(gtk4::gio::SettingsBindFlags::DEFAULT)
+            .build();
+
         let find_dialog = DialogFind::builder()
             .launch(window.clone())
             .forward(sender.input_sender(), AppInput::FromDialogFind);
@@ -88,6 +98,7 @@ impl SimpleComponent for AppModel {
         let model = AppModel {
             active_page: Page::Init(adw::NavigationPage::default()),
             find_dialog,
+            settings,
         };
 
         let widgets = view_output!();
@@ -119,6 +130,10 @@ impl SimpleComponent for AppModel {
             }
             AppInput::FromPageManage(msg) => match msg {
                 PageManageOutput::OpenFindDialog => self.find_dialog.emit(DialogFindInput::Show),
+                PageManageOutput::Disconnect => {
+                    let _ = self.settings.set_string(DEVICE_ADDRESS_KEY, "");
+                    sender.input(AppInput::Disconnect)
+                }
             },
             AppInput::FromDialogFind(msg) => {
                 if let Page::Manage(page) = &self.active_page {
