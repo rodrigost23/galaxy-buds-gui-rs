@@ -1,4 +1,7 @@
-use adw::prelude::{ActionRowExt, NavigationPageExt, PreferencesGroupExt, PreferencesRowExt};
+use adw::{
+    gio::prelude::SettingsExt,
+    prelude::{ActionRowExt, NavigationPageExt, PreferencesGroupExt, PreferencesRowExt},
+};
 use bluer::{Device, Session, Uuid};
 use futures::future;
 use gtk4::prelude::ListBoxRowExt;
@@ -7,9 +10,9 @@ use relm4::{
     component::{AsyncComponentParts, SimpleAsyncComponent},
     prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque},
 };
-use tracing::{debug};
+use tracing::{debug, error};
 
-use crate::model::device_info::DeviceInfo;
+use crate::{consts::DEVICE_ADDRESS_KEY, model::device_info::DeviceInfo, settings};
 
 #[derive(Debug)]
 struct DeviceComponent {
@@ -59,6 +62,7 @@ impl FactoryComponent for DeviceComponent {
 #[derive(Debug)]
 pub struct PageConnectionModel {
     devices: FactoryVecDeque<DeviceComponent>,
+    settings: adw::gio::Settings,
 }
 
 #[derive(Debug)]
@@ -100,17 +104,45 @@ impl SimpleAsyncComponent for PageConnectionModel {
         root: Self::Root,
         sender: AsyncComponentSender<Self>,
     ) -> AsyncComponentParts<Self> {
+        let settings = settings::get_settings();
         let devices: FactoryVecDeque<DeviceComponent> = FactoryVecDeque::builder()
             .launch(adw::PreferencesGroup::default())
             .forward(sender.input_sender(), |output| match output {
                 DeviceOutput::Connect(device) => PageConnectionInput::SelectDevice(device),
             });
 
-        let model = PageConnectionModel { devices };
+        let mut model = PageConnectionModel {
+            devices,
+            settings: settings.clone(),
+        };
         let devices_group = model.devices.widget();
         let widgets = view_output!();
 
-        sender.input(PageConnectionInput::LoadDevices);
+        // Perform the initial device scan before showing the page.
+        match discover_galaxy_buds().await {
+            Ok(discovered_devices) => {
+                let address = settings.string(DEVICE_ADDRESS_KEY).to_string();
+
+                if !address.is_empty() {
+                    for device in &discovered_devices {
+                        if device.address().to_string() == address {
+                            debug!(address = %address, "Found autoconnect device, sending output.");
+                            let device_info = DeviceInfo::from_device(device.clone()).await;
+                            let _ = sender.output(PageConnectionOutput::SelectDevice(device_info));
+                            return AsyncComponentParts { model, widgets };
+                        }
+                    }
+                    let _ = settings.set_string(DEVICE_ADDRESS_KEY, "");
+                    debug!("Autoconnect address set, but device not found.");
+                }
+
+                debug!("Populating list with discovered devices.");
+                model.populate_devices_list(discovered_devices).await;
+            }
+            Err(e) => {
+                error!("Failed to discover devices: {}", e);
+            }
+        };
 
         AsyncComponentParts { model, widgets }
     }
@@ -119,60 +151,66 @@ impl SimpleAsyncComponent for PageConnectionModel {
         match message {
             PageConnectionInput::LoadDevices => {
                 debug!("PageConnectionInput::LoadDevices");
-                self.devices.guard().clear();
-                if let Ok(discovered_devices) = self.discover_galaxy_buds().await {
-                    for device in discovered_devices.iter() {
-                        self.devices
-                            .guard()
-                            .push_back(DeviceInfo::from_device(device.clone()).await);
-                    }
+                if let Ok(discovered_devices) = discover_galaxy_buds().await {
+                    self.populate_devices_list(discovered_devices).await;
                 }
             }
 
-            PageConnectionInput::SelectDevice(device_info) => {
+            PageConnectionInput::SelectDevice(device) => {
                 debug!("Selected device");
-                let _ = sender.output(PageConnectionOutput::SelectDevice(device_info));
+                self.settings
+                    .set_string(DEVICE_ADDRESS_KEY, &device.address);
+                let _ = sender.output(PageConnectionOutput::SelectDevice(device));
             }
         }
     }
 }
 
 impl PageConnectionModel {
-    /// Scans for and returns the devices matching the Galaxy Buds SPP UUID.
-    async fn discover_galaxy_buds(self: &Self) -> Result<Vec<Device>, Box<dyn std::error::Error>> {
-        let session = Session::new().await.unwrap();
-        let adapter = session.default_adapter().await?;
-        adapter.set_powered(true).await?;
-
-        let custom_spp_uuid: Uuid = "2e73a4ad-332d-41fc-90e2-16bef06523f2".parse()?;
-
-        // Get all known device addresses and create a future to check each one.
-        let device_addrs = adapter.device_addresses().await?;
-        let check_futures = device_addrs
-            .into_iter()
-            .filter_map(|addr| adapter.device(addr).ok())
-            .map(|device| async {
-                // Check for the specific UUID. If found, return the device.
-                let has_uuid = match device.uuids().await {
-                    Ok(Some(uuids)) => uuids.contains(&custom_spp_uuid),
-                    _ => false,
-                };
-
-                if has_uuid { Some(device) } else { None }
-            });
-
-        // Run all checks concurrently and filter out the `None` results.
-        let found_devices: Vec<Device> = future::join_all(check_futures)
-            .await
-            .into_iter()
-            .flatten()
-            .collect();
-
-        // Log the found devices.
-        for device in &found_devices {
-            debug!(device = ?device, "Found device");
+    /// Clears the existing list and populates it with the given devices.
+    async fn populate_devices_list(&mut self, discovered_devices: Vec<Device>) {
+        let mut guard = self.devices.guard();
+        guard.clear();
+        for device in discovered_devices {
+            guard.push_back(DeviceInfo::from_device(device).await);
         }
-
-        Ok(found_devices)
     }
+}
+
+/// Scans for and returns the devices matching the Galaxy Buds SPP UUID.
+async fn discover_galaxy_buds() -> Result<Vec<Device>, Box<dyn std::error::Error>> {
+    let session = Session::new().await.unwrap();
+    let adapter = session.default_adapter().await.unwrap();
+    adapter.set_powered(true).await?;
+
+    let custom_spp_uuid: Uuid = "2e73a4ad-332d-41fc-90e2-16bef06523f2".parse()?;
+
+    // Get all known device addresses and create a future to check each one.
+    let device_addrs = adapter.device_addresses().await?;
+    let check_futures = device_addrs
+        .into_iter()
+        .filter_map(|addr| adapter.device(addr).ok())
+        .map(|device| async move {
+            // Check for the specific UUID. If found, return the device.
+            let has_uuid = match device.uuids().await {
+                Ok(Some(uuids)) => uuids.contains(&custom_spp_uuid),
+                _ => false,
+            };
+
+            if has_uuid { Some(device) } else { None }
+        });
+
+    // Run all checks concurrently and filter out the `None` results.
+    let found_devices: Vec<Device> = future::join_all(check_futures)
+        .await
+        .into_iter()
+        .flatten()
+        .collect();
+
+    // Log the found devices.
+    for device in &found_devices {
+        debug!(device = ?device, "Found device");
+    }
+
+    Ok(found_devices)
 }

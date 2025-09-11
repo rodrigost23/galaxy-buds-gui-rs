@@ -11,5 +11,8 @@
       <summary>Window Height</summary>
       <description>The height of the main window.</description>
     </key>
+    <key name="device-address" type="s">
+      <default>''</default>
+    </key>
   </schema>
 </schemalist>

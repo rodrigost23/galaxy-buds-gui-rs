@@ -12,6 +12,7 @@ fn main() {
 
     // Compile the schema into the OUT_DIR
     let status = Command::new("glib-compile-schemas")
+        .arg("--strict")
         .arg("--targetdir")
         .arg(&out_dir)
         .arg("data")

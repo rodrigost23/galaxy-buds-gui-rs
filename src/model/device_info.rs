@@ -1,22 +1,25 @@
-use bluer::{Device, DeviceProperty};
+use bluer::Device;
 
 #[derive(Debug, Clone)]
 pub struct DeviceInfo {
     pub name: String,
+    pub address: String,
     pub device: Device,
 }
 
 impl DeviceInfo {
     pub async fn from_device(device: Device) -> Self {
-        let props = device.all_properties().await.unwrap();
-        let name = props
-            .iter()
-            .find_map(|prop| match prop {
-                DeviceProperty::Name(n) => Some(n.clone()),
-                _ => None,
-            })
-            .unwrap_or_else(|| "Unknown Device".into());
+        let name = match device.name().await {
+            Ok(Some(n)) => n,
+            _ => "Unknown".to_string(),
+        };
 
-        DeviceInfo { name, device }
+        let address = device.address().to_string();
+
+        DeviceInfo {
+            name,
+            address,
+            device,
+        }
     }
 }
