@@ -88,14 +88,20 @@ impl SimpleAsyncComponent for PageConnectionModel {
             set_title: "Connect",
 
             #[wrap(Some)]
-            set_child = &adw::Clamp {
-                adw::PreferencesPage {
-                    #[local_ref]
-                    devices_group -> adw::PreferencesGroup {
-                        set_title: "Discovered Galaxy Buds",
+            set_child = &adw::ToolbarView {
+                add_top_bar = &adw::HeaderBar {},
+                add_top_bar = &adw::Banner {},
+
+                #[wrap(Some)]
+                set_content = &adw::Clamp {
+                    adw::PreferencesPage {
+                        #[local_ref]
+                        devices_group -> adw::PreferencesGroup {
+                            set_title: "Discovered Galaxy Buds",
+                        }
                     }
                 }
-            }
+            },
         }
     }
 

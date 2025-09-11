@@ -63,15 +63,9 @@ impl SimpleComponent for AppModel {
         adw::ApplicationWindow {
             set_title: Some("Galaxy Buds Manager"),
 
-            adw::ToolbarView {
-                add_top_bar = &adw::HeaderBar {},
-                add_top_bar = &adw::Banner {},
-
-                #[wrap(Some)]
-                set_content = &adw::NavigationView {
-                    #[watch]
-                    replace: &[model.active_page.widget().to_owned()],
-                }
+            adw::NavigationView {
+                #[watch]
+                replace: &[model.active_page.widget().to_owned()],
             },
         }
     }
