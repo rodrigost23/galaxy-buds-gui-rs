@@ -92,6 +92,7 @@ pub enum PageManageInput {
 #[derive(Debug)]
 pub enum PageManageOutput {
     OpenFindDialog,
+    Disconnect,
 }
 
 #[relm4::component(pub)]
@@ -107,7 +108,13 @@ impl SimpleComponent for PageManageModel {
 
             #[wrap(Some)]
             set_child = &adw::ToolbarView {
-                add_top_bar = &adw::HeaderBar {},
+                add_top_bar = &adw::HeaderBar {
+                    pack_end = &gtk4::Button {
+                        set_icon_name: "bluetooth-disconnected-symbolic",
+                        set_tooltip_text: Some("Change device"),
+                        connect_clicked => PageManageInput::Disconnect,
+                    },
+                },
                 add_top_bar = &adw::Banner {},
 
                 #[wrap(Some)]
@@ -302,7 +309,13 @@ impl SimpleComponent for PageManageModel {
                         .unwrap();
                 }
             }
-            PageManageInput::Disconnect => todo!(),
+            PageManageInput::Disconnect => {
+                self.bt_worker
+                    .sender()
+                    .send(BudsWorkerInput::Disconnect)
+                    .unwrap();
+                sender.output(PageManageOutput::Disconnect).unwrap();
+            }
             PageManageInput::BluetoothCommand(command) => {
                 self.bt_worker
                     .sender()

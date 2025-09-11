@@ -1,3 +1,4 @@
+use adw::gio::prelude::SettingsExt;
 use gtk4::gio::prelude::SettingsExtManual;
 use gtk4::prelude::GtkWindowExt;
 use relm4::{
@@ -12,6 +13,7 @@ use crate::{
         page_connection::{PageConnectionModel, PageConnectionOutput},
         page_manage::{PageManageInput, PageManageModel, PageManageOutput},
     },
+    consts::DEVICE_ADDRESS_KEY,
     model::device_info::DeviceInfo,
     settings,
 };
@@ -37,6 +39,7 @@ impl Page {
 pub struct AppModel {
     active_page: Page,
     find_dialog: Controller<DialogFind>,
+    settings: adw::gio::Settings,
 }
 
 #[derive(Debug)]
@@ -95,6 +98,7 @@ impl SimpleComponent for AppModel {
         let model = AppModel {
             active_page: Page::Init(adw::NavigationPage::default()),
             find_dialog,
+            settings,
         };
 
         let widgets = view_output!();
@@ -126,6 +130,10 @@ impl SimpleComponent for AppModel {
             }
             AppInput::FromPageManage(msg) => match msg {
                 PageManageOutput::OpenFindDialog => self.find_dialog.emit(DialogFindInput::Show),
+                PageManageOutput::Disconnect => {
+                    let _ = self.settings.set_string(DEVICE_ADDRESS_KEY, "");
+                    sender.input(AppInput::Disconnect)
+                }
             },
             AppInput::FromDialogFind(msg) => {
                 if let Page::Manage(page) = &self.active_page {
