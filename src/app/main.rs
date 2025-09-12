@@ -18,19 +18,28 @@ use crate::{
     settings,
 };
 
-#[derive(Debug)]
-pub enum Page {
-    Connection(AsyncController<PageConnectionModel>),
-    Manage(Controller<PageManageModel>),
+macro_rules! pages {
+    ($($page_name:ident($controller_type:ty)),+ $(,)?) => {
+        #[derive(Debug)]
+        pub enum Page {
+            // For each matched entry, create an enum page_name.
+            $($page_name($controller_type)),+
+        }
+
+        impl Page {
+            pub fn widget(&self) -> &adw::NavigationPage {
+                match self {
+                    // For each matched page_name, create a match arm that calls `.widget()`.
+                    $(Page::$page_name(controller) => controller.widget()),+
+                }
+            }
+        }
+    };
 }
 
-impl Page {
-    pub fn widget(&self) -> &adw::NavigationPage {
-        match self {
-            Page::Connection(controller) => controller.widget(),
-            Page::Manage(controller) => controller.widget(),
-        }
-    }
+pages! {
+    Connection(AsyncController<PageConnectionModel>),
+    Manage(Controller<PageManageModel>),
 }
 
 #[derive(Debug)]
