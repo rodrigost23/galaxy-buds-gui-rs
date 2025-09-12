@@ -4,7 +4,7 @@ use adw::{
 };
 use bluer::{Device, Session, Uuid};
 use futures::future;
-use gtk4::prelude::ListBoxRowExt;
+use gtk4::prelude::{ButtonExt, ListBoxRowExt, WidgetExt};
 use relm4::{
     AsyncComponentSender, FactorySender,
     component::{AsyncComponentParts, SimpleAsyncComponent},
@@ -63,6 +63,7 @@ impl FactoryComponent for DeviceComponent {
 pub struct PageConnectionModel {
     devices: FactoryVecDeque<DeviceComponent>,
     settings: adw::gio::Settings,
+    is_loading: bool,
 }
 
 #[derive(Debug)]
@@ -85,7 +86,7 @@ impl SimpleAsyncComponent for PageConnectionModel {
     view! {
         #[root]
         adw::NavigationPage {
-            set_title: "Connect",
+            set_title: "Select a Device",
 
             #[wrap(Some)]
             set_child = &adw::ToolbarView {
@@ -94,10 +95,26 @@ impl SimpleAsyncComponent for PageConnectionModel {
 
                 #[wrap(Some)]
                 set_content = &adw::Clamp {
-                    adw::PreferencesPage {
-                        #[local_ref]
-                        devices_group -> adw::PreferencesGroup {
-                            set_title: "Discovered Galaxy Buds",
+
+                    if model.devices.is_empty() {
+                        adw::StatusPage {
+                            set_icon_name: Some("bluetooth-disconnected-symbolic"),
+                            set_title: "No Galaxy Buds detected",
+                            set_description: Some("First you need to pair a Galaxy Buds device in your system settings."),
+
+                            gtk4::Button {
+                                set_label: "Refresh",
+                                #[watch]
+                                set_sensitive: !model.is_loading,
+                                connect_clicked => PageConnectionInput::LoadDevices,
+                            }
+                        }
+                    } else {
+                        adw::PreferencesPage {
+                            #[local_ref]
+                            devices_group -> adw::PreferencesGroup {
+                                set_title: "Discovered Galaxy Buds",
+                            }
                         }
                     }
                 }
@@ -120,6 +137,7 @@ impl SimpleAsyncComponent for PageConnectionModel {
         let mut model = PageConnectionModel {
             devices,
             settings: settings.clone(),
+            is_loading: true,
         };
         let devices_group = model.devices.widget();
         let widgets = view_output!();
@@ -157,6 +175,7 @@ impl SimpleAsyncComponent for PageConnectionModel {
         match message {
             PageConnectionInput::LoadDevices => {
                 debug!("PageConnectionInput::LoadDevices");
+                self.is_loading = true;
                 if let Ok(discovered_devices) = discover_galaxy_buds().await {
                     self.populate_devices_list(discovered_devices).await;
                 }
@@ -181,6 +200,7 @@ impl PageConnectionModel {
         for device in discovered_devices {
             guard.push_back(DeviceInfo::from_device(device).await);
         }
+        self.is_loading = false;
     }
 }
 
