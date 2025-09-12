@@ -1,6 +1,7 @@
 mod app;
 mod buds_worker;
 mod consts;
+mod macros;
 mod model;
 mod settings;
 

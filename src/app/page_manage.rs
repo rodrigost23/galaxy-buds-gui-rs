@@ -4,13 +4,18 @@ use galaxy_buds_rs::message::{
 };
 use gtk4::prelude::{BoxExt, ButtonExt, ListBoxRowExt, OrientableExt, WidgetExt};
 use relm4::{
-    Component, ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent, WorkerController,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
+    SimpleComponent, WorkerController,
 };
 
 use tracing::{debug, error};
 
 use crate::{
-    app::dialog_find::DialogFindOutput,
+    app::{
+        dialog_find::DialogFindOutput,
+        main::{Page, PageId},
+        page_noise::PageNoiseModel,
+    },
     buds_worker::{BluetoothWorker, BudsWorkerInput, BudsWorkerOutput},
     model::{
         buds_message::{BudsCommand, BudsMessage},
@@ -70,7 +75,6 @@ impl BudsStatus {
 
 #[derive(Debug)]
 pub struct PageManageModel {
-    active_page: String,
     bt_worker: WorkerController<BluetoothWorker>,
     connection_state: ConnectionState,
     buds_status: BudsStatus,
@@ -85,12 +89,14 @@ pub enum PageManageInput {
     BluetoothCommand(BudsCommand),
     OpenFindDialog,
     FindDialogCommand(DialogFindOutput),
+    Navigate(PageId),
 }
 
 #[derive(Debug)]
 pub enum PageManageOutput {
     OpenFindDialog,
     Disconnect,
+    Navigate(Page),
 }
 
 #[relm4::component(pub)]
@@ -193,7 +199,7 @@ impl SimpleComponent for PageManageModel {
                                 #[watch]
                                 set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
                                 set_activatable: true,
-
+                                connect_activated => PageManageInput::Navigate(PageId::Noise),
                             },
                             adw::ActionRow {
                                 set_title: "Touch options",
@@ -229,7 +235,6 @@ impl SimpleComponent for PageManageModel {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = PageManageModel {
-            active_page: "home".into(),
             device: device.clone(),
             bt_worker: BluetoothWorker::builder()
                 .detach_worker(device.clone())
@@ -307,6 +312,17 @@ impl SimpleComponent for PageManageModel {
                     DialogFindOutput::Find(active) => BudsCommand::Find(active),
                 }));
             }
+            PageManageInput::Navigate(page_id) => match page_id {
+                PageId::Noise => {
+                    let page = PageNoiseModel::builder()
+                        .launch(())
+                        .forward(sender.input_sender(), |msg| match msg {});
+                    sender
+                        .output(PageManageOutput::Navigate(Page::Noise(page)))
+                        .unwrap();
+                }
+                _ => {}
+            },
         }
     }
 }

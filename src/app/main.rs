@@ -12,35 +12,19 @@ use crate::{
         dialog_find::{DialogFind, DialogFindInput, DialogFindOutput},
         page_connection::{PageConnectionInput, PageConnectionModel, PageConnectionOutput},
         page_manage::{PageManageInput, PageManageModel, PageManageOutput},
+        page_noise::PageNoiseModel,
     },
     consts::DEVICE_ADDRESS_KEY,
+    define_page_enum,
     model::device_info::DeviceInfo,
     settings,
 };
 
-macro_rules! pages {
-    ($($page_name:ident($controller_type:ty)),+ $(,)?) => {
-        #[derive(Debug)]
-        pub enum Page {
-            // For each matched entry, create an enum page_name.
-            $($page_name($controller_type)),+
-        }
-
-        impl Page {
-            pub fn widget(&self) -> &adw::NavigationPage {
-                match self {
-                    // For each matched page_name, create a match arm that calls `.widget()`.
-                    $(Page::$page_name(controller) => controller.widget()),+
-                }
-            }
-        }
-    };
-}
-
-pages! {
+define_page_enum!(PageId, Page {
     Connection(AsyncController<PageConnectionModel>),
     Manage(Controller<PageManageModel>),
-}
+    Noise(Controller<PageNoiseModel>),
+});
 
 #[derive(Debug)]
 pub struct AppModel {
@@ -143,6 +127,9 @@ impl SimpleComponent for AppModel {
                 PageManageOutput::Disconnect => {
                     let _ = self.settings.set_string(DEVICE_ADDRESS_KEY, "");
                     sender.input(AppInput::Disconnect)
+                }
+                PageManageOutput::Navigate(page) => {
+                    self.active_page = Some(page);
                 }
             },
             AppInput::FromDialogFind(msg) => {

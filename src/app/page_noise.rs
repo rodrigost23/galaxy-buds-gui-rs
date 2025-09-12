@@ -1,6 +1,7 @@
 use adw::prelude::NavigationPageExt;
-use relm4::{ComponentParts, ComponentSender, SimpleComponent, gtk};
+use relm4::{ComponentParts, ComponentSender, SimpleComponent};
 
+#[derive(Debug)]
 pub struct PageNoiseModel {}
 
 #[derive(Debug)]
@@ -9,13 +10,11 @@ pub enum PageNoiseInput {}
 #[derive(Debug)]
 pub enum PageNoiseOutput {}
 
-pub struct PageNoiseInit {}
-
 #[relm4::component(pub)]
 impl SimpleComponent for PageNoiseModel {
     type Input = PageNoiseInput;
     type Output = PageNoiseOutput;
-    type Init = PageNoiseInit;
+    type Init = ();
 
     view! {
         #[root]
