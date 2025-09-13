@@ -5,14 +5,13 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, SimpleComponent,
     prelude::{AsyncComponent, AsyncComponentController, AsyncController},
 };
-use tracing::debug;
+use tracing::{debug, debug_span};
 
 use crate::{
     app::{
         dialog_find::{DialogFind, DialogFindInput, DialogFindOutput},
         page_connection::{PageConnectionInput, PageConnectionModel, PageConnectionOutput},
         page_manage::{PageManageInput, PageManageModel, PageManageOutput},
-        page_noise::PageNoiseModel,
     },
     consts::DEVICE_ADDRESS_KEY,
     define_page_enum,
@@ -20,10 +19,9 @@ use crate::{
     settings,
 };
 
-define_page_enum!(PageId, Page {
+define_page_enum!(Page {
     Connection(AsyncController<PageConnectionModel>),
     Manage(Controller<PageManageModel>),
-    Noise(Controller<PageNoiseModel>),
 });
 
 #[derive(Debug)]
@@ -32,6 +30,7 @@ pub struct AppModel {
     find_dialog: Controller<DialogFind>,
     settings: adw::gio::Settings,
     connect_page: AsyncController<PageConnectionModel>,
+    active_subpage: Option<adw::NavigationPage>,
 }
 
 #[derive(Debug)]
@@ -40,6 +39,7 @@ pub enum AppInput {
     Disconnect,
     FromPageManage(PageManageOutput),
     FromDialogFind(DialogFindOutput),
+    PagePopped(adw::NavigationPage),
 }
 
 #[derive(Debug)]
@@ -61,6 +61,9 @@ impl SimpleComponent for AppModel {
             #[name = "nav_view"]
             adw::NavigationView {
                 add: &connect_page_widget,
+                connect_popped[sender] => move |_, page| {
+                    sender.input(AppInput::PagePopped(page.clone()));
+                },
             },
         }
     }
@@ -98,6 +101,7 @@ impl SimpleComponent for AppModel {
 
         let model = AppModel {
             active_page: None,
+            active_subpage: None,
             connect_page,
             find_dialog,
             settings,
@@ -129,7 +133,7 @@ impl SimpleComponent for AppModel {
                     sender.input(AppInput::Disconnect)
                 }
                 PageManageOutput::Navigate(page) => {
-                    self.active_page = Some(page);
+                    self.active_subpage = Some(page);
                 }
             },
             AppInput::FromDialogFind(msg) => {
@@ -137,13 +141,40 @@ impl SimpleComponent for AppModel {
                     page.emit(PageManageInput::FindDialogCommand(msg));
                 }
             }
+            AppInput::PagePopped(popped_page) => {
+                if let Some(subpage) = &self.active_subpage {
+                    if popped_page == subpage.clone() {
+                        self.active_subpage = None;
+                    }
+                }
+
+                if let Some(active_page) = &self.active_page {
+                    if popped_page == active_page.widget().clone() {
+                        self.active_page = None;
+                    }
+                }
+            }
         }
     }
 
     fn post_view(&self, widgets: &mut Self::Widgets, sender: ComponentSender<Self>) {
         match &self.active_page {
-            Some(page) => {
-                widgets.nav_view.push(page.widget());
+            Some(page_to_push) => {
+                let mut is_visible = false;
+
+                if let Some(visible_page) = widgets.nav_view.visible_page() {
+                    if &visible_page == page_to_push.widget() {
+                        is_visible = true;
+                    }
+                }
+
+                if !is_visible {
+                    widgets.nav_view.push(page_to_push.widget());
+                }
+
+                if let Some(subpage) = &self.active_subpage {
+                    widgets.nav_view.push(subpage);
+                }
             }
             None => {
                 widgets.nav_view.pop_to_page(self.connect_page.widget());

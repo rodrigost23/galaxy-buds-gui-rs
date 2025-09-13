@@ -11,12 +11,9 @@ use relm4::{
 use tracing::{debug, error};
 
 use crate::{
-    app::{
-        dialog_find::DialogFindOutput,
-        main::{Page, PageId},
-        page_noise::PageNoiseModel,
-    },
+    app::{dialog_find::DialogFindOutput, page_noise::PageNoiseModel},
     buds_worker::{BluetoothWorker, BudsWorkerInput, BudsWorkerOutput},
+    define_page_enum,
     model::{
         buds_message::{BudsCommand, BudsMessage},
         device_info::DeviceInfo,
@@ -73,12 +70,17 @@ impl BudsStatus {
     }
 }
 
+define_page_enum!(PageId, Page {
+    Noise(Controller<PageNoiseModel>),
+});
+
 #[derive(Debug)]
 pub struct PageManageModel {
     bt_worker: WorkerController<BluetoothWorker>,
     connection_state: ConnectionState,
     buds_status: BudsStatus,
     device: DeviceInfo,
+    active_page: Option<Page>,
 }
 
 #[derive(Debug)]
@@ -96,7 +98,7 @@ pub enum PageManageInput {
 pub enum PageManageOutput {
     OpenFindDialog,
     Disconnect,
-    Navigate(Page),
+    Navigate(adw::NavigationPage),
 }
 
 #[relm4::component(pub)]
@@ -241,6 +243,7 @@ impl SimpleComponent for PageManageModel {
                 .forward(sender.input_sender(), PageManageInput::BluetoothEvent),
             connection_state: ConnectionState::Disconnected,
             buds_status: BudsStatus::None,
+            active_page: None,
         };
 
         let widgets = view_output!();
@@ -312,17 +315,26 @@ impl SimpleComponent for PageManageModel {
                     DialogFindOutput::Find(active) => BudsCommand::Find(active),
                 }));
             }
-            PageManageInput::Navigate(page_id) => match page_id {
-                PageId::Noise => {
-                    let page = PageNoiseModel::builder()
-                        .launch(())
-                        .forward(sender.input_sender(), |msg| match msg {});
+            PageManageInput::Navigate(page_id) => {
+                match page_id {
+                    PageId::Noise => {
+                        // Replace page if not a match
+                        if !matches!(self.active_page, Some(Page::Noise(_))) {
+                            self.active_page = Some(Page::Noise(
+                                PageNoiseModel::builder()
+                                    .launch(())
+                                    .forward(sender.input_sender(), |msg| match msg {}),
+                            ));
+                        }
+                    }
+                };
+
+                if let Some(page) = &self.active_page {
                     sender
-                        .output(PageManageOutput::Navigate(Page::Noise(page)))
+                        .output(PageManageOutput::Navigate(page.widget().clone()))
                         .unwrap();
                 }
-                _ => {}
-            },
+            }
         }
     }
 }
