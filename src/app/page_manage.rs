@@ -1,7 +1,4 @@
 use adw::prelude::{ActionRowExt, NavigationPageExt, PreferencesRowExt};
-use galaxy_buds_rs::message::{
-    extended_status_updated::ExtendedStatusUpdate, status_updated::StatusUpdate,
-};
 use gtk4::prelude::{BoxExt, ButtonExt, ListBoxRowExt, OrientableExt, WidgetExt};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
@@ -11,11 +8,15 @@ use relm4::{
 use tracing::{debug, error};
 
 use crate::{
-    app::{dialog_find::DialogFindOutput, page_noise::PageNoiseModel},
+    app::{
+        dialog_find::DialogFindOutput,
+        page_noise::{PageNoiseInput, PageNoiseModel},
+    },
     buds_worker::{BluetoothWorker, BudsWorkerInput, BudsWorkerOutput},
     define_page_enum,
     model::{
         buds_message::{BudsCommand, BudsMessage},
+        buds_status::BudsStatus,
         device_info::DeviceInfo,
     },
 };
@@ -26,48 +27,6 @@ enum ConnectionState {
     Disconnected,
     Connecting,
     Error(String),
-}
-
-#[derive(Debug)]
-enum BudsStatus {
-    StatusUpdate(StatusUpdate),
-    ExtendedStatusUpdate(ExtendedStatusUpdate),
-    None,
-}
-
-impl BudsStatus {
-    pub fn battery_text(&self) -> String {
-        let (battery_left, battery_right) = match self {
-            BudsStatus::StatusUpdate(s) => (
-                Some(s.battery_left.to_string()),
-                Some(s.battery_right.to_string()),
-            ),
-            BudsStatus::ExtendedStatusUpdate(s) => (
-                Some(s.battery_left.to_string()),
-                Some(s.battery_right.to_string()),
-            ),
-            _ => (None, None),
-        };
-
-        match (battery_left, battery_right) {
-            (Some(left), Some(right)) => {
-                if left == right {
-                    format!("L / R {}%", left)
-                } else {
-                    format!("L {}% / R {}%", left, right)
-                }
-            }
-            _ => "N/A".to_string(),
-        }
-    }
-
-    pub fn case_battery_text(&self) -> String {
-        match self {
-            BudsStatus::StatusUpdate(s) => format!("{}%", s.battery_case),
-            BudsStatus::ExtendedStatusUpdate(s) => format!("{}%", s.battery_case),
-            BudsStatus::None => "N/A".to_string(),
-        }
-    }
 }
 
 define_page_enum!(PageId, Page {
@@ -264,6 +223,10 @@ impl SimpleComponent for PageManageModel {
                     BudsMessage::ExtendedStatusUpdate(ext_status) => {
                         debug!("Extended Status Update: {:?}", ext_status);
                         self.buds_status = BudsStatus::ExtendedStatusUpdate(ext_status);
+
+                        if let Some(Page::Noise(page)) = &self.active_page {
+                            page.emit(PageNoiseInput::StatusUpdate(ext_status));
+                        }
                     }
                     BudsMessage::Unknown { id, buffer: _ } => {
                         debug!("Unknown message ID: {}", id);

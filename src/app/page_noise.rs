@@ -1,11 +1,15 @@
 use adw::prelude::NavigationPageExt;
+use galaxy_buds_rs::message::extended_status_updated::ExtendedStatusUpdate;
 use relm4::{ComponentParts, ComponentSender, SimpleComponent};
+use tracing::debug;
 
 #[derive(Debug)]
 pub struct PageNoiseModel {}
 
 #[derive(Debug)]
-pub enum PageNoiseInput {}
+pub enum PageNoiseInput {
+    StatusUpdate(ExtendedStatusUpdate),
+}
 
 #[derive(Debug)]
 pub enum PageNoiseOutput {}
@@ -43,7 +47,11 @@ impl SimpleComponent for PageNoiseModel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>) {
-        match message {}
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+        match msg {
+            PageNoiseInput::StatusUpdate(status) => {
+                debug!("ambient_noise: {:?}", status.ambient_sound_enabled);
+            }
+        }
     }
 }
