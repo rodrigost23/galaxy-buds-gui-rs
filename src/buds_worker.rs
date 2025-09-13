@@ -1,11 +1,12 @@
 use bluer::{
-    Session,
+    Session, Uuid,
     rfcomm::{
         Profile, Role, Stream,
         stream::{OwnedReadHalf, OwnedWriteHalf},
     },
 };
 use futures::StreamExt;
+use galaxy_buds_rs::message;
 use relm4::{Sender, Worker, prelude::*};
 use std::sync::{
     Arc,
@@ -16,11 +17,14 @@ use tokio::{
     runtime::Runtime,
     sync::Mutex,
 };
-use tracing::{debug, debug_span, error, info, trace, warn};
+use tracing::{debug, debug_span, error, info, trace, trace_span, warn};
 
-use crate::model::{
-    buds_message::{BudsCommand, BudsMessage},
-    device_info::DeviceInfo,
+use crate::{
+    consts::SAMSUNG_SPP_UUID,
+    model::{
+        buds_message::{BudsCommand, BudsMessage},
+        device_info::DeviceInfo,
+    },
 };
 
 const READ_BUFFER_SIZE: usize = 2048;
@@ -160,7 +164,8 @@ impl BluetoothWorker {
         device.connect().await?;
         info!("Device connected.");
 
-        let spp_uuid = bluer::id::ServiceClass::SerialPort.into();
+        // let spp_uuid = bluer::id::ServiceClass::SerialPort.into();
+        let spp_uuid: Uuid = SAMSUNG_SPP_UUID.parse()?;
         let profile = Profile {
             uuid: spp_uuid,
             role: Some(Role::Client),
@@ -212,25 +217,32 @@ async fn read_task(
     sender: Sender<BudsWorkerOutput>,
     is_running: Arc<AtomicBool>,
 ) {
-    let span = debug_span!("Stream read loop");
-    debug!(parent: &span, "Start reading");
+    let span = trace_span!("Stream read loop");
+    let _enter = span.enter();
+    debug!("Start reading");
+    let mut read_buffer: Vec<u8> = Vec::new();
 
     while is_running.load(Ordering::Relaxed) {
-        let mut buffer = [0u8; READ_BUFFER_SIZE];
+        let mut temp_buffer = [0u8; READ_BUFFER_SIZE];
 
-        match stream.read(&mut buffer).await {
+        match stream.read(&mut temp_buffer).await {
             Ok(0) => {
-                info!(parent: &span, "Stream closed by peer");
+                info!("Stream closed by peer");
                 break;
             }
             Ok(n) => {
-                trace!("Read {} bytes", n);
-                let buff = &buffer[..n];
-
-                if let Some(msg) = BudsMessage::from_bytes(buff) {
-                    if sender.send(BudsWorkerOutput::DataReceived(msg)).is_err() {
-                        warn!("UI receiver dropped, could not send DataReceived message.");
-                        break;
+                read_buffer.extend_from_slice(&temp_buffer[..n]);
+                trace!(
+                    "Read {} bytes. Current buffer size: {}",
+                    n,
+                    read_buffer.len()
+                );
+                for message_frame in process_buffer(&mut read_buffer) {
+                    if let Some(msg) = BudsMessage::from_bytes(&message_frame) {
+                        if sender.send(BudsWorkerOutput::DataReceived(msg)).is_err() {
+                            warn!("UI receiver dropped, could not send DataReceived message.");
+                            break;
+                        }
                     }
                 }
             }
@@ -254,4 +266,54 @@ async fn read_task(
     }
     is_running.store(false, Ordering::Relaxed);
     debug!(parent: &span, "Stop reading");
+}
+
+fn process_buffer(buffer: &mut Vec<u8>) -> Vec<Vec<u8>> {
+    let span = trace_span!("Process buffer");
+    let _enter = span.enter();
+
+    let mut messages_frames = Vec::new();
+
+    loop {
+        // Find the start and end of the next message.
+        let bom_pos = buffer.iter().position(|&b| b == message::BOM);
+        let eom_pos = buffer.iter().position(|&b| b == message::EOM);
+
+        match (bom_pos, eom_pos) {
+            // Complete message:
+            (Some(start), Some(end)) if start < end => {
+                // If there was garbage data before the BOM, log and discard it.
+                if start > 0 {
+                    trace!("Discarding {} bytes of garbage data.", start);
+                }
+
+                let message_frame = &buffer[start..=end];
+                trace!("Found message with {} bytes.", message_frame.len());
+                messages_frames.push(message_frame.to_vec());
+
+                // Remove the processed message and any preceding garbage,
+                // and continue loop
+                buffer.drain(..=end);
+            }
+            // Found only beginning of message; message is incomplete.
+            (Some(start), _) => {
+                // Discard any garbage before the first valid BOM we found.
+                if start > 0 {
+                    buffer.drain(..start);
+                }
+                trace!("Found incomplete message with {} bytes.", buffer.len());
+                // Break the loop and keep buffer with incomplete message.
+                break;
+            }
+            // No BOM found; either buffer is empty or there is only garbage.
+            _ => {
+                if !buffer.is_empty() {
+                    trace!("No BOM found, clearing buffer of {} bytes.", buffer.len());
+                    buffer.clear();
+                }
+                break;
+            }
+        }
+    }
+    return messages_frames;
 }

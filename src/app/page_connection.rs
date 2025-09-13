@@ -12,7 +12,7 @@ use relm4::{
 };
 use tracing::{debug, error};
 
-use crate::{consts::DEVICE_ADDRESS_KEY, model::device_info::DeviceInfo, settings};
+use crate::{consts::{DEVICE_ADDRESS_KEY, SAMSUNG_SPP_UUID}, model::device_info::DeviceInfo, settings};
 
 #[derive(Debug)]
 struct DeviceComponent {
@@ -210,7 +210,7 @@ async fn discover_galaxy_buds() -> Result<Vec<Device>, Box<dyn std::error::Error
     let adapter = session.default_adapter().await.unwrap();
     adapter.set_powered(true).await?;
 
-    let custom_spp_uuid: Uuid = "2e73a4ad-332d-41fc-90e2-16bef06523f2".parse()?;
+    let custom_spp_uuid: Uuid = SAMSUNG_SPP_UUID.parse()?;
 
     // Get all known device addresses and create a future to check each one.
     let device_addrs = adapter.device_addresses().await?;
