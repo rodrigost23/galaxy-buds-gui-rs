@@ -16,8 +16,8 @@ use crate::{
     define_page_enum,
     model::{
         buds_message::{BudsCommand, BudsMessage},
-        buds_status::BudsStatus,
-        device_info::DeviceInfo,
+        buds_status::{BudsStatus, UpdateFrom},
+        device_info::DeviceInfo, util::OptionNaExt,
     },
 };
 
@@ -37,7 +37,7 @@ define_page_enum!(PageId, Page {
 pub struct PageManageModel {
     bt_worker: WorkerController<BluetoothWorker>,
     connection_state: ConnectionState,
-    buds_status: BudsStatus,
+    buds_status: Option<BudsStatus>,
     device: DeviceInfo,
     active_page: Option<Page>,
 }
@@ -118,7 +118,7 @@ impl SimpleComponent for PageManageModel {
 
                                         gtk4::Label {
                                             #[watch]
-                                            set_label: model.buds_status.battery_text().as_str(),
+                                            set_label: &model.buds_status.or_na(BudsStatus::battery_text),
                                             add_css_class: "heading",
                                         },
                                     },
@@ -132,7 +132,7 @@ impl SimpleComponent for PageManageModel {
 
                                         gtk4::Label {
                                             #[watch]
-                                            set_label: model.buds_status.case_battery_text().as_str(),
+                                            set_label: &model.buds_status.or_na(BudsStatus::case_battery_text),
                                             add_css_class: "heading",
                                         },
                                     },
@@ -160,6 +160,12 @@ impl SimpleComponent for PageManageModel {
                                 #[watch]
                                 set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
                                 set_activatable: true,
+                                add_suffix = &gtk4::Label {
+                                    #[watch]
+                                    set_label: &model.buds_status.or_na(BudsStatus::noise_control_mode_text),
+                                    add_css_class: "dim-label",
+                                },
+                                add_suffix: &gtk4::Image::from_icon_name("go-next-symbolic"),
                                 connect_activated => PageManageInput::Navigate(PageId::Noise),
                             },
                             adw::ActionRow {
@@ -167,6 +173,7 @@ impl SimpleComponent for PageManageModel {
                                 #[watch]
                                 set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
                                 set_activatable: true,
+                                add_suffix: &gtk4::Image::from_icon_name("go-next-symbolic"),
 
                             },
                             adw::ActionRow {
@@ -174,6 +181,7 @@ impl SimpleComponent for PageManageModel {
                                 #[watch]
                                 set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
                                 set_activatable: true,
+                                add_suffix: &gtk4::Image::from_icon_name("go-next-symbolic"),
 
                             },
                             adw::ActionRow {
@@ -181,6 +189,7 @@ impl SimpleComponent for PageManageModel {
                                 #[watch]
                                 set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
                                 set_activatable: true,
+                                add_suffix: &gtk4::Image::from_icon_name("go-next-symbolic"),
                                 connect_activated => PageManageInput::OpenFindDialog,
                             },
                         }
@@ -201,7 +210,7 @@ impl SimpleComponent for PageManageModel {
                 .detach_worker(device.clone())
                 .forward(sender.input_sender(), PageManageInput::BluetoothEvent),
             connection_state: ConnectionState::Disconnected,
-            buds_status: BudsStatus::None,
+            buds_status: None,
             active_page: None,
         };
 
@@ -218,14 +227,22 @@ impl SimpleComponent for PageManageModel {
                 BudsWorkerOutput::DataReceived(data) => match data {
                     BudsMessage::StatusUpdate(status) => {
                         debug!("Status Update: {:?}", status);
-                        self.buds_status = BudsStatus::StatusUpdate(status);
+                        if let Some(buds_status) = self.buds_status.as_mut() {
+                            buds_status.update(&status);
+                        }
                     }
                     BudsMessage::ExtendedStatusUpdate(ext_status) => {
                         debug!("Extended Status Update: {:?}", ext_status);
-                        self.buds_status = BudsStatus::ExtendedStatusUpdate(ext_status);
+                        self.buds_status = Some(BudsStatus::from(&ext_status));
 
                         if let Some(Page::Noise(page)) = &self.active_page {
                             page.emit(PageNoiseInput::StatusUpdate(ext_status));
+                        }
+                    }
+                    BudsMessage::NoiseControlsUpdate(noise_controls_updated) => {
+                        debug!("Noise Controls Update: {:?}", noise_controls_updated);
+                        if let Some(buds_status) = self.buds_status.as_mut() {
+                            buds_status.update(&noise_controls_updated);
                         }
                     }
                     BudsMessage::Unknown { id, buffer: _ } => {

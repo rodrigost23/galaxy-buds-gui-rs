@@ -1,7 +1,6 @@
 use galaxy_buds_rs::{
     message::{
-        Message, Payload, extended_status_updated::ExtendedStatusUpdate, find_my_bud, ids, manager,
-        status_updated::StatusUpdate,
+        extended_status_updated::ExtendedStatusUpdate, find_my_bud, ids, manager, noise_controls_updated::NoiseControlsUpdated, status_updated::StatusUpdate, Message, Payload
     },
     model::Model,
 };
@@ -10,6 +9,7 @@ use galaxy_buds_rs::{
 pub enum BudsMessage {
     StatusUpdate(StatusUpdate),
     ExtendedStatusUpdate(ExtendedStatusUpdate),
+    NoiseControlsUpdate(NoiseControlsUpdated),
 
     Unknown { id: u8, buffer: Vec<u8> },
 }
@@ -34,6 +34,7 @@ impl BudsMessage {
         let parsed_message = match id {
             ids::STATUS_UPDATED => Self::StatusUpdate(message.into()),
             ids::EXTENDED_STATUS_UPDATED => Self::ExtendedStatusUpdate(message.into()),
+            ids::NOISE_CONTROLS_UPDATE => Self::NoiseControlsUpdate(message.into()),
             _ => Self::Unknown {
                 id,
                 buffer: buff.to_vec(),
