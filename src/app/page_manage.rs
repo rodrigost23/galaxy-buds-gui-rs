@@ -17,7 +17,8 @@ use crate::{
     model::{
         buds_message::{BudsCommand, BudsMessage},
         buds_status::{BudsStatus, UpdateFrom},
-        device_info::DeviceInfo, util::OptionNaExt,
+        device_info::DeviceInfo,
+        util::OptionNaExt,
     },
 };
 
@@ -233,16 +234,19 @@ impl SimpleComponent for PageManageModel {
                     }
                     BudsMessage::ExtendedStatusUpdate(ext_status) => {
                         debug!("Extended Status Update: {:?}", ext_status);
-                        self.buds_status = Some(BudsStatus::from(&ext_status));
-
+                        let buds_status = BudsStatus::from(&ext_status);
                         if let Some(Page::Noise(page)) = &self.active_page {
-                            page.emit(PageNoiseInput::StatusUpdate(ext_status));
+                            page.emit(PageNoiseInput::ModeUpdate(buds_status.noise_control_mode()));
                         }
+                        self.buds_status = Some(buds_status);
                     }
                     BudsMessage::NoiseControlsUpdate(noise_controls_updated) => {
                         debug!("Noise Controls Update: {:?}", noise_controls_updated);
                         if let Some(buds_status) = self.buds_status.as_mut() {
                             buds_status.update(&noise_controls_updated);
+                        }
+                        if let Some(Page::Noise(page)) = &self.active_page {
+                            page.emit(PageNoiseInput::ModeUpdate(noise_controls_updated.noise_control_mode));
                         }
                     }
                     BudsMessage::Unknown { id, buffer: _ } => {
@@ -300,11 +304,13 @@ impl SimpleComponent for PageManageModel {
                     PageId::Noise => {
                         // Replace page if not a match
                         if !matches!(self.active_page, Some(Page::Noise(_))) {
-                            self.active_page = Some(Page::Noise(
-                                PageNoiseModel::builder()
-                                    .launch(())
-                                    .forward(sender.input_sender(), |msg| match msg {}),
-                            ));
+                            if let Some(buds_status) = &self.buds_status {
+                                self.active_page = Some(Page::Noise(
+                                    PageNoiseModel::builder()
+                                        .launch(buds_status.noise_control_mode())
+                                        .forward(sender.input_sender(), |msg| match msg {}),
+                                ));
+                            }
                         }
                     }
                 };
