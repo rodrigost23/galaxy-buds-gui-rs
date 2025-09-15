@@ -15,7 +15,9 @@ pub enum PageNoiseInput {
 }
 
 #[derive(Debug)]
-pub enum PageNoiseOutput {}
+pub enum PageNoiseOutput {
+    SetMode(NoiseControlMode),
+}
 
 #[relm4::component(pub)]
 impl SimpleComponent for PageNoiseModel {
@@ -45,6 +47,11 @@ impl SimpleComponent for PageNoiseModel {
                                 add_prefix = &gtk4::CheckButton::new() {
                                     #[watch]
                                     set_active: model.mode == NoiseControlMode::Off,
+                                    connect_toggled[sender] => move |c| {
+                                        if c.is_active() {
+                                            sender.output(PageNoiseOutput::SetMode(NoiseControlMode::Off));
+                                        }
+                                    },
                                 },
                                 set_activatable_widget: Some(&check_off),
                             },
@@ -55,6 +62,11 @@ impl SimpleComponent for PageNoiseModel {
                                     set_group: Some(&check_off),
                                     #[watch]
                                     set_active: model.mode == NoiseControlMode::AmbientSound,
+                                    connect_toggled[sender] => move |c| {
+                                        if c.is_active() {
+                                            sender.output(PageNoiseOutput::SetMode(NoiseControlMode::AmbientSound));
+                                        }
+                                    },
                                 },
                                 set_activatable_widget: Some(&check_ambient),
                             },
@@ -64,7 +76,12 @@ impl SimpleComponent for PageNoiseModel {
                                 add_prefix = &gtk4::CheckButton::new() {
                                     set_group: Some(&check_ambient),
                                     #[watch]
-                                    set_active: model.mode == NoiseControlMode::NoiseReduction
+                                    set_active: model.mode == NoiseControlMode::NoiseReduction,
+                                    connect_toggled[sender] => move |c| {
+                                        if c.is_active() {
+                                            sender.output(PageNoiseOutput::SetMode(NoiseControlMode::NoiseReduction));
+                                        }
+                                    },
                                 },
                                 set_activatable_widget: Some(&check_noise),
                             }

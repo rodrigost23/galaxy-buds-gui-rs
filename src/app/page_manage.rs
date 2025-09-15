@@ -10,7 +10,7 @@ use tracing::{debug, error};
 use crate::{
     app::{
         dialog_find::DialogFindOutput,
-        page_noise::{PageNoiseInput, PageNoiseModel},
+        page_noise::{PageNoiseInput, PageNoiseModel, PageNoiseOutput},
     },
     buds_worker::{BluetoothWorker, BudsWorkerInput, BudsWorkerOutput},
     define_page_enum,
@@ -246,7 +246,9 @@ impl SimpleComponent for PageManageModel {
                             buds_status.update(&noise_controls_updated);
                         }
                         if let Some(Page::Noise(page)) = &self.active_page {
-                            page.emit(PageNoiseInput::ModeUpdate(noise_controls_updated.noise_control_mode));
+                            page.emit(PageNoiseInput::ModeUpdate(
+                                noise_controls_updated.noise_control_mode,
+                            ));
                         }
                     }
                     BudsMessage::Unknown { id, buffer: _ } => {
@@ -308,7 +310,15 @@ impl SimpleComponent for PageManageModel {
                                 self.active_page = Some(Page::Noise(
                                     PageNoiseModel::builder()
                                         .launch(buds_status.noise_control_mode())
-                                        .forward(sender.input_sender(), |msg| match msg {}),
+                                        .forward(sender.input_sender(), |msg| match msg {
+                                            PageNoiseOutput::SetMode(noise_control_mode) => {
+                                                PageManageInput::BluetoothCommand(
+                                                    BudsCommand::SetNoiseControlMode(
+                                                        noise_control_mode,
+                                                    ),
+                                                )
+                                            }
+                                        }),
                                 ));
                             }
                         }

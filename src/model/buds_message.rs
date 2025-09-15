@@ -1,6 +1,9 @@
 use galaxy_buds_rs::{
     message::{
-        extended_status_updated::ExtendedStatusUpdate, find_my_bud, ids, manager, noise_controls_updated::NoiseControlsUpdated, status_updated::StatusUpdate, Message, Payload
+        Message, Payload, ambient_mode, bud_property::NoiseControlMode,
+        extended_status_updated::ExtendedStatusUpdate, find_my_bud, ids, manager,
+        noise_controls_updated::NoiseControlsUpdated, set_noise_reduction,
+        status_updated::StatusUpdate,
     },
     model::Model,
 };
@@ -49,6 +52,7 @@ impl BudsMessage {
 pub enum BudsCommand {
     ManagerInfo,
     Find(bool),
+    SetNoiseControlMode(NoiseControlMode),
 }
 
 impl BudsCommand {
@@ -57,6 +61,13 @@ impl BudsCommand {
         match self {
             BudsCommand::ManagerInfo => manager::new(true, 34).to_byte_array(),
             BudsCommand::Find(active) => find_my_bud::new(active.clone()).to_byte_array(),
+            BudsCommand::SetNoiseControlMode(noise_control_mode) => match noise_control_mode {
+                NoiseControlMode::Off => set_noise_reduction::new(false).to_byte_array(),
+                NoiseControlMode::AmbientSound => {
+                    ambient_mode::SetAmbientMode::new(true).to_byte_array()
+                }
+                NoiseControlMode::NoiseReduction => set_noise_reduction::new(true).to_byte_array(),
+            },
         }
     }
 }
