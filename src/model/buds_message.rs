@@ -1,6 +1,8 @@
 use galaxy_buds_rs::{
     message::{
-        Message, Payload, extended_status_updated::ExtendedStatusUpdate, find_my_bud, ids, manager,
+        Message, Payload, ambient_mode, bud_property::NoiseControlMode,
+        extended_status_updated::ExtendedStatusUpdate, find_my_bud, ids, manager,
+        noise_controls_updated::NoiseControlsUpdated, set_noise_reduction,
         status_updated::StatusUpdate,
     },
     model::Model,
@@ -10,6 +12,7 @@ use galaxy_buds_rs::{
 pub enum BudsMessage {
     StatusUpdate(StatusUpdate),
     ExtendedStatusUpdate(ExtendedStatusUpdate),
+    NoiseControlsUpdate(NoiseControlsUpdated),
 
     Unknown { id: u8, buffer: Vec<u8> },
 }
@@ -34,6 +37,7 @@ impl BudsMessage {
         let parsed_message = match id {
             ids::STATUS_UPDATED => Self::StatusUpdate(message.into()),
             ids::EXTENDED_STATUS_UPDATED => Self::ExtendedStatusUpdate(message.into()),
+            ids::NOISE_CONTROLS_UPDATE => Self::NoiseControlsUpdate(message.into()),
             _ => Self::Unknown {
                 id,
                 buffer: buff.to_vec(),
@@ -48,6 +52,7 @@ impl BudsMessage {
 pub enum BudsCommand {
     ManagerInfo,
     Find(bool),
+    SetNoiseControlMode(NoiseControlMode),
 }
 
 impl BudsCommand {
@@ -56,6 +61,13 @@ impl BudsCommand {
         match self {
             BudsCommand::ManagerInfo => manager::new(true, 34).to_byte_array(),
             BudsCommand::Find(active) => find_my_bud::new(active.clone()).to_byte_array(),
+            BudsCommand::SetNoiseControlMode(noise_control_mode) => match noise_control_mode {
+                NoiseControlMode::Off => set_noise_reduction::new(false).to_byte_array(),
+                NoiseControlMode::AmbientSound => {
+                    ambient_mode::SetAmbientMode::new(true).to_byte_array()
+                }
+                NoiseControlMode::NoiseReduction => set_noise_reduction::new(true).to_byte_array(),
+            },
         }
     }
 }

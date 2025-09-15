@@ -7,7 +7,8 @@ edition = "2024"
 adw = { package = "libadwaita", version = "0.8", features = ["v1_7"] }
 gtk4 = { version = "0.10", features = ["v4_10"] }
 bluer = { version = "0.17", features = ["bluetoothd", "id", "rfcomm"] }
-galaxy_buds_rs = "0.2.10"
+# galaxy_buds_rs = "0.2.10"
+galaxy_buds_rs = { git = "https://github.com/rodrigost23/GalaxyBuds-rs.git" }
 tokio = { version = "1.47", features = ["full"] }
 futures = "0.3.31"
 relm4 = { version = "0.10", features = ["libadwaita"] }

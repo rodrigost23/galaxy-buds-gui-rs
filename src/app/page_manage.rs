@@ -1,20 +1,24 @@
 use adw::prelude::{ActionRowExt, NavigationPageExt, PreferencesRowExt};
-use galaxy_buds_rs::message::{
-    extended_status_updated::ExtendedStatusUpdate, status_updated::StatusUpdate,
-};
 use gtk4::prelude::{BoxExt, ButtonExt, ListBoxRowExt, OrientableExt, WidgetExt};
 use relm4::{
-    Component, ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent, WorkerController,
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
+    SimpleComponent, WorkerController,
 };
 
 use tracing::{debug, error};
 
 use crate::{
-    app::dialog_find::DialogFindOutput,
+    app::{
+        dialog_find::DialogFindOutput,
+        page_noise::{PageNoiseInput, PageNoiseModel, PageNoiseOutput},
+    },
     buds_worker::{BluetoothWorker, BudsWorkerInput, BudsWorkerOutput},
+    define_page_enum,
     model::{
         buds_message::{BudsCommand, BudsMessage},
+        buds_status::{BudsStatus, UpdateFrom},
         device_info::DeviceInfo,
+        util::OptionNaExt,
     },
 };
 
@@ -26,55 +30,17 @@ enum ConnectionState {
     Error(String),
 }
 
-#[derive(Debug)]
-enum BudsStatus {
-    StatusUpdate(StatusUpdate),
-    ExtendedStatusUpdate(ExtendedStatusUpdate),
-    None,
-}
-
-impl BudsStatus {
-    pub fn battery_text(&self) -> String {
-        let (battery_left, battery_right) = match self {
-            BudsStatus::StatusUpdate(s) => (
-                Some(s.battery_left.to_string()),
-                Some(s.battery_right.to_string()),
-            ),
-            BudsStatus::ExtendedStatusUpdate(s) => (
-                Some(s.battery_left.to_string()),
-                Some(s.battery_right.to_string()),
-            ),
-            _ => (None, None),
-        };
-
-        match (battery_left, battery_right) {
-            (Some(left), Some(right)) => {
-                if left == right {
-                    format!("L / R {}%", left)
-                } else {
-                    format!("L {}% / R {}%", left, right)
-                }
-            }
-            _ => "N/A".to_string(),
-        }
-    }
-
-    pub fn case_battery_text(&self) -> String {
-        match self {
-            BudsStatus::StatusUpdate(s) => format!("{}%", s.battery_case),
-            BudsStatus::ExtendedStatusUpdate(s) => format!("{}%", s.battery_case),
-            BudsStatus::None => "N/A".to_string(),
-        }
-    }
-}
+define_page_enum!(PageId, Page {
+    Noise(Controller<PageNoiseModel>),
+});
 
 #[derive(Debug)]
 pub struct PageManageModel {
-    active_page: String,
     bt_worker: WorkerController<BluetoothWorker>,
     connection_state: ConnectionState,
-    buds_status: BudsStatus,
+    buds_status: Option<BudsStatus>,
     device: DeviceInfo,
+    active_page: Option<Page>,
 }
 
 #[derive(Debug)]
@@ -85,12 +51,14 @@ pub enum PageManageInput {
     BluetoothCommand(BudsCommand),
     OpenFindDialog,
     FindDialogCommand(DialogFindOutput),
+    Navigate(PageId),
 }
 
 #[derive(Debug)]
 pub enum PageManageOutput {
     OpenFindDialog,
     Disconnect,
+    Navigate(adw::NavigationPage),
 }
 
 #[relm4::component(pub)]
@@ -151,7 +119,7 @@ impl SimpleComponent for PageManageModel {
 
                                         gtk4::Label {
                                             #[watch]
-                                            set_label: model.buds_status.battery_text().as_str(),
+                                            set_label: &model.buds_status.or_na(BudsStatus::battery_text),
                                             add_css_class: "heading",
                                         },
                                     },
@@ -165,7 +133,7 @@ impl SimpleComponent for PageManageModel {
 
                                         gtk4::Label {
                                             #[watch]
-                                            set_label: model.buds_status.case_battery_text().as_str(),
+                                            set_label: &model.buds_status.or_na(BudsStatus::case_battery_text),
                                             add_css_class: "heading",
                                         },
                                     },
@@ -193,13 +161,20 @@ impl SimpleComponent for PageManageModel {
                                 #[watch]
                                 set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
                                 set_activatable: true,
-
+                                add_suffix = &gtk4::Label {
+                                    #[watch]
+                                    set_label: &model.buds_status.or_na(BudsStatus::noise_control_mode_text),
+                                    add_css_class: "dim-label",
+                                },
+                                add_suffix: &gtk4::Image::from_icon_name("go-next-symbolic"),
+                                connect_activated => PageManageInput::Navigate(PageId::Noise),
                             },
                             adw::ActionRow {
                                 set_title: "Touch options",
                                 #[watch]
                                 set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
                                 set_activatable: true,
+                                add_suffix: &gtk4::Image::from_icon_name("go-next-symbolic"),
 
                             },
                             adw::ActionRow {
@@ -207,6 +182,7 @@ impl SimpleComponent for PageManageModel {
                                 #[watch]
                                 set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
                                 set_activatable: true,
+                                add_suffix: &gtk4::Image::from_icon_name("go-next-symbolic"),
 
                             },
                             adw::ActionRow {
@@ -214,6 +190,7 @@ impl SimpleComponent for PageManageModel {
                                 #[watch]
                                 set_sensitive: matches!(model.connection_state, ConnectionState::Connected),
                                 set_activatable: true,
+                                add_suffix: &gtk4::Image::from_icon_name("go-next-symbolic"),
                                 connect_activated => PageManageInput::OpenFindDialog,
                             },
                         }
@@ -229,13 +206,13 @@ impl SimpleComponent for PageManageModel {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = PageManageModel {
-            active_page: "home".into(),
             device: device.clone(),
             bt_worker: BluetoothWorker::builder()
                 .detach_worker(device.clone())
                 .forward(sender.input_sender(), PageManageInput::BluetoothEvent),
             connection_state: ConnectionState::Disconnected,
-            buds_status: BudsStatus::None,
+            buds_status: None,
+            active_page: None,
         };
 
         let widgets = view_output!();
@@ -251,11 +228,28 @@ impl SimpleComponent for PageManageModel {
                 BudsWorkerOutput::DataReceived(data) => match data {
                     BudsMessage::StatusUpdate(status) => {
                         debug!("Status Update: {:?}", status);
-                        self.buds_status = BudsStatus::StatusUpdate(status);
+                        if let Some(buds_status) = self.buds_status.as_mut() {
+                            buds_status.update(&status);
+                        }
                     }
                     BudsMessage::ExtendedStatusUpdate(ext_status) => {
                         debug!("Extended Status Update: {:?}", ext_status);
-                        self.buds_status = BudsStatus::ExtendedStatusUpdate(ext_status);
+                        let buds_status = BudsStatus::from(&ext_status);
+                        if let Some(Page::Noise(page)) = &self.active_page {
+                            page.emit(PageNoiseInput::ModeUpdate(buds_status.noise_control_mode()));
+                        }
+                        self.buds_status = Some(buds_status);
+                    }
+                    BudsMessage::NoiseControlsUpdate(noise_controls_updated) => {
+                        debug!("Noise Controls Update: {:?}", noise_controls_updated);
+                        if let Some(buds_status) = self.buds_status.as_mut() {
+                            buds_status.update(&noise_controls_updated);
+                        }
+                        if let Some(Page::Noise(page)) = &self.active_page {
+                            page.emit(PageNoiseInput::ModeUpdate(
+                                noise_controls_updated.noise_control_mode,
+                            ));
+                        }
                     }
                     BudsMessage::Unknown { id, buffer: _ } => {
                         debug!("Unknown message ID: {}", id);
@@ -306,6 +300,36 @@ impl SimpleComponent for PageManageModel {
                 sender.input(PageManageInput::BluetoothCommand(match cmd {
                     DialogFindOutput::Find(active) => BudsCommand::Find(active),
                 }));
+            }
+            PageManageInput::Navigate(page_id) => {
+                match page_id {
+                    PageId::Noise => {
+                        // Replace page if not a match
+                        if !matches!(self.active_page, Some(Page::Noise(_))) {
+                            if let Some(buds_status) = &self.buds_status {
+                                self.active_page = Some(Page::Noise(
+                                    PageNoiseModel::builder()
+                                        .launch(buds_status.noise_control_mode())
+                                        .forward(sender.input_sender(), |msg| match msg {
+                                            PageNoiseOutput::SetMode(noise_control_mode) => {
+                                                PageManageInput::BluetoothCommand(
+                                                    BudsCommand::SetNoiseControlMode(
+                                                        noise_control_mode,
+                                                    ),
+                                                )
+                                            }
+                                        }),
+                                ));
+                            }
+                        }
+                    }
+                };
+
+                if let Some(page) = &self.active_page {
+                    sender
+                        .output(PageManageOutput::Navigate(page.widget().clone()))
+                        .unwrap();
+                }
             }
         }
     }
